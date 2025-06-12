@@ -1,0 +1,4 @@
+screenshots/
+test_out/
+*.exe
+nimbalyst-local/
