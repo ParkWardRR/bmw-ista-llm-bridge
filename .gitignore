@@ -15,3 +15,7 @@ polyglot/nim/report_gen/nimcache/
 
 # Exported DB data (large JSON files)
 db-export/
+
+# Demo rendering scripts (keep GIFs)
+demo/*.tape
+demo/render_demos.py

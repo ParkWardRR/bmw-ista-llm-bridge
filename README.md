@@ -25,21 +25,38 @@
 
 ## What is this?
 
-**ista-bridge** captures everything that happens during a BMW ISTA diagnostic session — screenshots, fault codes, ECU data, vehicle identity — and packages it into files that AI models (Claude, ChatGPT, etc.) can consume to help you troubleshoot your car.
+<p align="center">
+  <img src="demo/dashboard.gif" alt="ista-bridge TUI dashboard" width="100%">
+</p>
+
+**ista-bridge** captures everything that happens during a BMW ISTA diagnostic session — screenshots, fault codes, ECU data, vehicle identity — and packages it into files that AI models (Claude, ChatGPT, etc.) can consume to help you troubleshoot your car. It also decrypts and queries ISTA's 7 GB DiagDocDb for VIN decoding, fault code lookup, and diagnostic data.
 
 ### The problem
 
-BMW ISTA is dealer-level diagnostic software. It reads fault codes, shows ECU trees, runs guided troubleshooting, and displays wiring diagrams — but everything is locked inside a WPF desktop GUI. There's no export button, no API, no JSON. If you want an LLM to help you diagnose your car, you'd have to manually screenshot everything and type out the fault codes.
+BMW ISTA is dealer-level diagnostic software. It reads fault codes, shows ECU trees, runs guided troubleshooting, and displays wiring diagrams — but everything is locked inside a WPF desktop GUI. There's no export button, no API, no JSON. The main database (`DiagDocDb.sqlite`) is encrypted. If you want an LLM to help you diagnose your car, you'd have to manually screenshot everything and type out the fault codes.
 
 ### The solution
 
-Run ISTA, diagnose your car, and **ista-bridge** silently does three things:
+Run ISTA, diagnose your car, and **ista-bridge** does four things:
 
 1. **Captures screenshots** every time the ISTA screen changes (AVIF, ~30-50 KB each)
 2. **Parses ISTA's XML session files** to extract structured vehicle data
-3. **Bundles everything** into a clean package you can feed to an LLM
+3. **Queries DiagDocDb** — decrypts the 7 GB database for VIN ranges, fault codes, P-codes, and diagnostic data
+4. **Bundles everything** into a clean package you can feed to an LLM
 
 Then you paste `summary.md` into Claude or ChatGPT and ask *"what's wrong with my car?"* — with full context.
+
+### VIN Lookup
+
+<p align="center">
+  <img src="demo/vin-lookup.gif" alt="VIN lookup workflow" width="100%">
+</p>
+
+### Fault Code Search
+
+<p align="center">
+  <img src="demo/fault-lookup.gif" alt="Fault code lookup workflow" width="100%">
+</p>
 
 ---
 
@@ -166,6 +183,104 @@ session_2025-03-15_092200_WBAXXXXXXXX00000/
 | `faults.json` | Every DTC: code, description, status (active/stored), warning lamp, mileage | ~1-5 KB |
 | `screenshots/` | Chronological AVIF captures of the ISTA GUI | ~30-50 KB each |
 
+### `ista-bridge vin <vin>`
+
+Decode a VIN using the DiagDocDb VINRANGES table (7.9M records).
+
+```bash
+# Full 17-digit VIN — matches by positions 4-7 and sequential range
+ista-bridge.exe vin WBAPH5C55BA123456
+
+# Just positions 4-7 (model/type code)
+ista-bridge.exe vin JB1C
+
+# JSON output
+ista-bridge.exe vin WBAPH5C55BA123456 --json
+```
+
+### `ista-bridge lookup <type> <search>`
+
+Search DiagDocDb for fault codes, P-codes, Check Control messages, and diagnostic codes.
+
+```bash
+# P-code lookup
+ista-bridge.exe lookup pcode P0300
+
+# BMW fault code
+ista-bridge.exe lookup fault 48291
+
+# Check Control messages (text search)
+ista-bridge.exe lookup cc "engine oil"
+
+# Diagnostic code search
+ista-bridge.exe lookup diag "DME"
+
+# Raw JSON output
+ista-bridge.exe lookup pcode P0420 --json
+```
+
+### `ista-bridge report [date]`
+
+Generate a Markdown diagnostic report from an ISTA session.
+
+```bash
+# Latest session
+ista-bridge.exe report
+
+# Specific date
+ista-bridge.exe report 2026-09-20
+```
+
+### `ista-bridge db <subcommand>`
+
+Direct access to the encrypted DiagDocDb (232 tables).
+
+```bash
+ista-bridge.exe db tables              # List all tables
+ista-bridge.exe db schema VINRANGES    # Show table columns
+ista-bridge.exe db count XEP_FAULTCODES # Row count
+ista-bridge.exe db query "SELECT ..."  # Raw SQL
+ista-bridge.exe db export VINRANGES    # Export table as JSON
+ista-bridge.exe db export-all db-export # Export all tables
+```
+
+### `ista-bridge odincs <dll-or-directory>`
+
+Extract .NET assembly public key tokens from DLLs — useful for discovering database encryption keys.
+
+```bash
+ista-bridge.exe odincs C:\EC-Apps\ISTA\TesterGUI\bin\Release\ISTAGUI.exe
+```
+
+---
+
+## DiagDocDb Access
+
+The `DiagDocDb.sqlite` database (7.6 GB, 232 tables, 7.9M VIN ranges) is encrypted with SQLite SEE (Encryption Extension). The encryption key is the uppercase public key token of the Rheingold assembly's strong name signing key.
+
+**How it works:**
+1. The 32-bit `SQLite.Interop.dll` requires an x86 process to load
+2. ista-bridge spawns a 32-bit PowerShell process (`SysWOW64\powershell.exe`)
+3. PowerShell loads `System.Data.SQLite.dll` and opens the DB with the key
+4. Results come back as JSON
+
+The key can be extracted automatically from any ISTA DLL using the `odincs` command, or stored in a key file at `%USERPROFILE%\Desktop\ista_keys.txt`.
+
+---
+
+## Polyglot Satellite Tools
+
+Four standalone CLI tools in different languages, each handling a specific domain. Built for fun and to demonstrate polyglot integration.
+
+| Tool | Language | Purpose |
+|---|---|---|
+| `ista-keyextract` | **Odin** | Parse .NET PE/CLI metadata to extract the DB encryption key |
+| `ista-faultlookup` | **Gleam** (Erlang/BEAM) | Fault code and P-code search with partial matching |
+| `ista-vinlookup` | **Zig** | Fast VIN decoder with binary search over VINRANGES data |
+| `ista-report` | **Nim** | Diagnostic report generator (Markdown/text) from JSON data |
+
+All tools accept `--keyfile` or `--dll` flags for password discovery. Source code is in the `polyglot/` directory.
+
 ---
 
 ## Hardware Acceleration
@@ -264,7 +379,7 @@ The `.zip.log` file is a ZIP archive (despite the extension) containing the full
 - No REST API — the GUI and services communicate over WCF binary protocol (named pipes / TCP)
 - Vehicle communication uses DoIP (Diagnostics over IP) per ISO 13400
 - Each diagnostic operation opens a fresh TCP connection to the vehicle
-- The `DiagDocDb.sqlite` (7 GB) is encrypted with an unknown key
+- The `DiagDocDb.sqlite` (7 GB) is encrypted with SQLite SEE — key is the Rheingold assembly public key token
 - The `xmlvalueprimitive_*.sqlite` databases are readable and contain diagnostic procedures as compressed XML with FTS5 search
 
 ---
@@ -328,9 +443,10 @@ go build -o ista-bridge.exe .
 | `natefinch/lumberjack.v2` | Log file rotation |
 | `charmbracelet/bubbletea` | Interactive terminal UI framework |
 | `charmbracelet/lipgloss` | TUI styling and layout |
-| `charmbracelet/bubbles` | TUI components (table, spinner) |
+| `charmbracelet/bubbles` | TUI components (table, spinner, text input) |
 | *(stdlib)* `encoding/xml` | ISTA XML session parsing |
 | *(stdlib)* `syscall` | Win32 API (PrintWindow, BitBlt, DPI) |
+| *(stdlib)* `os/exec` | 32-bit PowerShell bridge for DB access |
 
 No CGo. No C compiler needed. Pure Go + FFmpeg.
 
@@ -342,6 +458,12 @@ No CGo. No C compiler needed. Pure Go + FFmpeg.
 bmw-ista-llm-bridge/
 ├── main.go          # Entry point, subcommand routing, capture loop
 ├── tui.go           # Bubble Tea interactive terminal UI
+├── db.go            # DiagDocDb access via 32-bit PowerShell bridge
+├── cmd_db.go        # Database subcommands (tables, export, query, schema)
+├── cmd_vin.go       # VIN lookup command
+├── cmd_lookup.go    # Fault code / P-code / CC message lookup
+├── cmd_report.go    # Markdown diagnostic report generator
+├── cmd_odincs.go    # .NET public key token extraction
 ├── session.go       # ISTA session discovery and XML parsing
 ├── bundle.go        # LLM-friendly session bundling (JSON + Markdown)
 ├── win32.go         # Win32 API: window enumeration, PrintWindow, BitBlt, DPI
@@ -349,8 +471,12 @@ bmw-ista-llm-bridge/
 ├── hasher.go        # Perceptual hash (pHash) for fast change rejection
 ├── config.go        # TOML configuration with defaults
 ├── logging.go       # Structured logging (slog) with rotation (lumberjack)
-├── go.mod
-└── go.sum
+├── polyglot/
+│   ├── odin/        # PE/CLI key extractor (Odin)
+│   ├── gleam/       # Fault code lookup (Gleam/Erlang)
+│   ├── zig/         # VIN decoder with binary search (Zig)
+│   └── nim/         # Report generator (Nim)
+└── demo/            # TUI demo GIFs and rendering scripts
 ```
 
 ---
@@ -364,6 +490,7 @@ See [ROADMAP.md](ROADMAP.md) for the full phased plan.
 | 1. Screenshot Capture | **Done** | Win32 capture, pHash+pixel diff, AVIF encoding |
 | 2. Session Parsing | **Done** | XML parser for ISTA transaction/meta/FASTA files |
 | 3. Session Bundling | **Done** | JSON + Markdown output for LLM consumption |
+| 3.5. DiagDocDb Access | **Done** | Decrypt + query the 7 GB database (232 tables, 7.9M VIN ranges) |
 | 4. LLM Integration | Planned | `ista-bridge ask` — direct Claude/ChatGPT API integration |
 | 5. Distribution | Planned | GoReleaser, GitHub releases, Winget/Scoop |
 
