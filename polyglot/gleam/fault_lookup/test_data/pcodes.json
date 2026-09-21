@@ -1,0 +1,44 @@
+[
+  {
+    "pcode": "P0983",
+    "fcode": 12345,
+    "device": "GSAW02FP",
+    "title": "Shift Solenoid D Control Circuit High"
+  },
+  {
+    "pcode": "P0300",
+    "fcode": 10882,
+    "device": "DMEK01FP",
+    "title": "Random/Multiple Cylinder Misfire Detected"
+  },
+  {
+    "pcode": "P0420",
+    "fcode": 15479,
+    "device": "DMEK01FP",
+    "title": "Catalyst System Efficiency Below Threshold Bank 1"
+  },
+  {
+    "pcode": "P0171",
+    "fcode": 15012,
+    "device": "DMEK01FP",
+    "title": "System Too Lean Bank 1"
+  },
+  {
+    "pcode": "U0100",
+    "fcode": 23894,
+    "device": "KOMBI04FP",
+    "title": "Lost Communication With ECM/PCM"
+  },
+  {
+    "pcode": "C1201",
+    "fcode": 20114,
+    "device": "DSC10FP",
+    "title": "ABS Control Unit Malfunction"
+  },
+  {
+    "pcode": "P0128",
+    "fcode": 15200,
+    "device": "DMEK01FP",
+    "title": "Coolant Thermostat Below Regulating Temperature"
+  }
+]

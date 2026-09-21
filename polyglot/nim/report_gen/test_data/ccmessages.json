@@ -1,0 +1,4 @@
+[
+  {"cc_id":100,"title":"Engine malfunction","long_text":"Reduced power. Have vehicle checked.","cause":"DME fault detected"},
+  {"cc_id":140,"title":"Check brake system","long_text":"Brake performance may be reduced. Drive carefully and have brakes checked immediately.","cause":"DSC fault detected"}
+]

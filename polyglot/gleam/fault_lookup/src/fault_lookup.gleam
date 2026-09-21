@@ -1,0 +1,225 @@
+import argv
+import gleam/dynamic/decode
+import gleam/int
+import gleam/io
+import gleam/json
+import gleam/list
+import gleam/result
+import gleam/string
+import simplifile
+
+/// A single BMW fault code entry, as found in `faultcodes.json`.
+pub type FaultCode {
+  FaultCode(
+    code: String,
+    sae_code: String,
+    title: String,
+    ecu_variant: String,
+    ecu_group: String,
+    weighting: Int,
+    safety_relevant: Bool,
+  )
+}
+
+/// A single OBD P-code entry, as found in `pcodes.json`. Each P-code maps to
+/// a BMW fault code number (`fcode`) that can be cross referenced against the
+/// `FaultCode` list.
+pub type PCode {
+  PCode(pcode: String, fcode: Int, device: String, title: String)
+}
+
+pub fn main() {
+  case argv.load().arguments {
+    [] -> print_usage()
+    args -> run_search(string.join(args, " "))
+  }
+}
+
+fn print_usage() -> Nil {
+  io.println("BMW Fault Code Lookup")
+  io.println("")
+  io.println("Usage: gleam run -- <search term>")
+  io.println("")
+  io.println(
+    "Searches BMW fault codes and OBD P-codes by code number, SAE code,",
+  )
+  io.println("P-code, fault code number, or description text (case-insensitive,")
+  io.println("partial match).")
+}
+
+fn run_search(query: String) -> Nil {
+  case resolve_data_dir() {
+    Error(Nil) ->
+      io.println(
+        "Error: could not find a data directory (looked for ./data and ./test_data)",
+      )
+    Ok(dir) -> {
+      case load_fault_codes(dir), load_pcodes(dir) {
+        Error(message), _ -> io.println("Error loading fault codes: " <> message)
+        _, Error(message) -> io.println("Error loading P-codes: " <> message)
+        Ok(fault_codes), Ok(pcodes) -> {
+          let matched_fault_codes =
+            list.filter(fault_codes, matches_fault_code(_, query))
+          let matched_pcodes = list.filter(pcodes, matches_pcode(_, query))
+
+          print_fault_results(matched_fault_codes)
+          io.println("")
+          print_pcode_results(matched_pcodes)
+        }
+      }
+    }
+  }
+}
+
+/// Prefer a `data` directory (for real/production data) but fall back to
+/// `test_data` (the bundled sample data) if it does not exist, so that
+/// `gleam run -- <term>` works out of the box.
+fn resolve_data_dir() -> Result(String, Nil) {
+  case simplifile.is_directory("data") {
+    Ok(True) -> Ok("data")
+    _ ->
+      case simplifile.is_directory("test_data") {
+        Ok(True) -> Ok("test_data")
+        _ -> Error(Nil)
+      }
+  }
+}
+
+fn load_fault_codes(dir: String) -> Result(List(FaultCode), String) {
+  let path = dir <> "/faultcodes.json"
+  use content <- result.try(read_file(path))
+  json.parse(from: content, using: decode.list(of: fault_code_decoder()))
+  |> result.map_error(fn(_) { "could not parse " <> path <> " as JSON" })
+}
+
+fn load_pcodes(dir: String) -> Result(List(PCode), String) {
+  let path = dir <> "/pcodes.json"
+  use content <- result.try(read_file(path))
+  json.parse(from: content, using: decode.list(of: pcode_decoder()))
+  |> result.map_error(fn(_) { "could not parse " <> path <> " as JSON" })
+}
+
+fn read_file(path: String) -> Result(String, String) {
+  simplifile.read(path)
+  |> result.map_error(fn(error) {
+    "could not read " <> path <> " (" <> simplifile.describe_error(error) <> ")"
+  })
+}
+
+fn fault_code_decoder() -> decode.Decoder(FaultCode) {
+  use code <- decode.field("code", decode.string)
+  use sae_code <- decode.field("sae_code", decode.string)
+  use title <- decode.field("title", decode.string)
+  use ecu_variant <- decode.field("ecu_variant", decode.string)
+  use ecu_group <- decode.field("ecu_group", decode.string)
+  use weighting <- decode.field("weighting", decode.int)
+  use safety_relevant <- decode.field("safety_relevant", decode.bool)
+  decode.success(FaultCode(
+    code: code,
+    sae_code: sae_code,
+    title: title,
+    ecu_variant: ecu_variant,
+    ecu_group: ecu_group,
+    weighting: weighting,
+    safety_relevant: safety_relevant,
+  ))
+}
+
+fn pcode_decoder() -> decode.Decoder(PCode) {
+  use pcode <- decode.field("pcode", decode.string)
+  use fcode <- decode.field("fcode", decode.int)
+  use device <- decode.field("device", decode.string)
+  use title <- decode.field("title", decode.string)
+  decode.success(PCode(pcode: pcode, fcode: fcode, device: device, title: title))
+}
+
+fn matches_fault_code(fault_code: FaultCode, query: String) -> Bool {
+  let needle = string.lowercase(query)
+  string.contains(string.lowercase(fault_code.code), needle)
+  || string.contains(string.lowercase(fault_code.sae_code), needle)
+  || string.contains(string.lowercase(fault_code.title), needle)
+  || string.contains(string.lowercase(fault_code.ecu_variant), needle)
+  || string.contains(string.lowercase(fault_code.ecu_group), needle)
+}
+
+fn matches_pcode(pcode: PCode, query: String) -> Bool {
+  let needle = string.lowercase(query)
+  string.contains(string.lowercase(pcode.pcode), needle)
+  || string.contains(string.lowercase(pcode.title), needle)
+  || string.contains(string.lowercase(pcode.device), needle)
+  || string.contains(int.to_string(pcode.fcode), needle)
+}
+
+fn print_fault_results(results: List(FaultCode)) -> Nil {
+  let count = list.length(results)
+  io.println(
+    "=== Fault Code Results (" <> int.to_string(count) <> " " <> match_word(
+      count,
+    ) <> ") ===",
+  )
+  io.println("")
+  case results {
+    [] -> Nil
+    _ -> io.println(string.join(list.index_map(results, format_fault_entry), "\n\n"))
+  }
+}
+
+fn print_pcode_results(results: List(PCode)) -> Nil {
+  let count = list.length(results)
+  io.println(
+    "=== P-Code Results (" <> int.to_string(count) <> " " <> match_word(count) <> ") ===",
+  )
+  io.println("")
+  case results {
+    [] -> Nil
+    _ -> io.println(string.join(list.index_map(results, format_pcode_entry), "\n\n"))
+  }
+}
+
+fn format_fault_entry(fault_code: FaultCode, index: Int) -> String {
+  let sae = case fault_code.sae_code {
+    "" -> "N/A"
+    code -> code
+  }
+  let safety = case fault_code.safety_relevant {
+    True -> "Yes"
+    False -> "No"
+  }
+
+  "["
+  <> int.to_string(index + 1)
+  <> "] Code: "
+  <> fault_code.code
+  <> " | SAE: "
+  <> sae
+  <> " | ECU: "
+  <> fault_code.ecu_variant
+  <> " ("
+  <> fault_code.ecu_group
+  <> ")\n    "
+  <> fault_code.title
+  <> "\n    Weighting: "
+  <> int.to_string(fault_code.weighting)
+  <> " | Safety: "
+  <> safety
+}
+
+fn format_pcode_entry(pcode: PCode, index: Int) -> String {
+  "["
+  <> int.to_string(index + 1)
+  <> "] "
+  <> pcode.pcode
+  <> " -> F"
+  <> int.to_string(pcode.fcode)
+  <> " | Device: "
+  <> pcode.device
+  <> "\n    "
+  <> pcode.title
+}
+
+fn match_word(count: Int) -> String {
+  case count {
+    1 -> "match"
+    _ -> "matches"
+  }
+}

@@ -25,6 +25,21 @@ func main() {
 			os.Args = append(os.Args[:1], os.Args[2:]...)
 			runWatch()
 			return
+		case "db":
+			runDB(os.Args[2:])
+			return
+		case "vin":
+			runVINLookup(os.Args[2:])
+			return
+		case "lookup":
+			runLookup(os.Args[2:])
+			return
+		case "report":
+			runReport(os.Args[2:])
+			return
+		case "odincs":
+			runOdincs(os.Args[2:])
+			return
 		}
 	}
 	runTUI()

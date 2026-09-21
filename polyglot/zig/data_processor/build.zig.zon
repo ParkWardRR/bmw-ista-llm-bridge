@@ -1,0 +1,12 @@
+.{
+    .name = .ista_vinlookup,
+    .version = "0.1.0",
+    .fingerprint = 0xdc4d11838f827e17,
+    .minimum_zig_version = "0.16.0",
+    .dependencies = .{},
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}

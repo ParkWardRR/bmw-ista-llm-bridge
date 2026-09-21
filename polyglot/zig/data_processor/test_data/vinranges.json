@@ -1,0 +1,12 @@
+[
+  { "from": "0000001", "to": "0000100", "type_key": "AB11", "vin_4_7": "BA11", "year": "2020", "month": "03", "gearbox": "A" },
+  { "from": "0000101", "to": "0000250", "type_key": "AB12", "vin_4_7": "BA12", "year": "2020", "month": "05", "gearbox": "M" },
+  { "from": "0000251", "to": "0000500", "type_key": "CD21", "vin_4_7": "BA21", "year": "2020", "month": "09", "gearbox": "A" },
+  { "from": "0000501", "to": "0001000", "type_key": "CD22", "vin_4_7": "BA22", "year": "2021", "month": "01", "gearbox": "A" },
+  { "from": "0001001", "to": "0001500", "type_key": "EF31", "vin_4_7": "BA31", "year": "2021", "month": "04", "gearbox": "M" },
+  { "from": "0100000", "to": "0100500", "type_key": "GH41", "vin_4_7": "BA41", "year": "2021", "month": "07", "gearbox": "A" },
+  { "from": "0100501", "to": "0101000", "type_key": "GH42", "vin_4_7": "BA42", "year": "2021", "month": "11", "gearbox": "A" },
+  { "from": "0123000", "to": "0123999", "type_key": "IJ51", "vin_4_7": "BA51", "year": "2022", "month": "02", "gearbox": "M" },
+  { "from": "0123000", "to": "0123999", "type_key": "IJ52", "vin_4_7": "BA52", "year": "2022", "month": "02", "gearbox": "A" },
+  { "from": "A100000", "to": "A200000", "type_key": "KL61", "vin_4_7": "BA61", "year": "2022", "month": "06", "gearbox": "A" }
+]

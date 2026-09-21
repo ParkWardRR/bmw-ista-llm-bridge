@@ -2,3 +2,16 @@ screenshots/
 test_out/
 *.exe
 nimbalyst-local/
+ista_keys.txt
+ista_keys*
+*.keys
+
+# Polyglot build artifacts
+polyglot/gleam/fault_lookup/build/
+polyglot/zig/data_processor/zig-out/
+polyglot/zig/data_processor/zig-cache/
+polyglot/zig/data_processor/.zig-cache/
+polyglot/nim/report_gen/nimcache/
+
+# Exported DB data (large JSON files)
+db-export/

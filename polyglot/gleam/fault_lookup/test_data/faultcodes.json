@@ -1,0 +1,74 @@
+[
+  {
+    "code": "1",
+    "sae_code": "",
+    "title": "Fuse, interior lighting",
+    "ecu_variant": "zke3",
+    "ecu_group": "d_0000",
+    "weighting": 50,
+    "safety_relevant": false
+  },
+  {
+    "code": "12345",
+    "sae_code": "P0983",
+    "title": "Shift Solenoid D Control Circuit High",
+    "ecu_variant": "egs",
+    "ecu_group": "g_0230",
+    "weighting": 80,
+    "safety_relevant": false
+  },
+  {
+    "code": "2A82",
+    "sae_code": "P0300",
+    "title": "Random/Multiple Cylinder Misfire Detected",
+    "ecu_variant": "dme",
+    "ecu_group": "e_0100",
+    "weighting": 95,
+    "safety_relevant": true
+  },
+  {
+    "code": "4F91",
+    "sae_code": "C1201",
+    "title": "ABS control unit malfunction",
+    "ecu_variant": "dsc",
+    "ecu_group": "c_0500",
+    "weighting": 99,
+    "safety_relevant": true
+  },
+  {
+    "code": "80AC",
+    "sae_code": "",
+    "title": "Airbag control unit, internal fault",
+    "ecu_variant": "srs",
+    "ecu_group": "c_0900",
+    "weighting": 99,
+    "safety_relevant": true
+  },
+  {
+    "code": "9012",
+    "sae_code": "B1004",
+    "title": "Driver door module, window lifter motor short circuit",
+    "ecu_variant": "ftm",
+    "ecu_group": "d_0300",
+    "weighting": 40,
+    "safety_relevant": false
+  },
+  {
+    "code": "3C77",
+    "sae_code": "P0420",
+    "title": "Catalyst System Efficiency Below Threshold",
+    "ecu_variant": "dme",
+    "ecu_group": "e_0150",
+    "weighting": 70,
+    "safety_relevant": false
+  },
+  {
+    "code": "5D18",
+    "sae_code": "U0100",
+    "title": "Lost communication with ECM/PCM",
+    "ecu_variant": "kombi",
+    "ecu_group": "b_0050",
+    "weighting": 85,
+    "safety_relevant": false
+  }
+]

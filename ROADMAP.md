@@ -94,6 +94,30 @@ Package a diagnostic session into files an LLM can consume.
 - [ ] Estimate token count for the bundle
 - [ ] Auto-truncate if bundle exceeds LLM context limits
 
+## Phase 3.5: DiagDocDb Access [DONE]
+
+Decrypt and query the encrypted DiagDocDb.sqlite (7.6 GB,232 tables,7.9M VIN ranges).
+
+### DB Password Discovery
+- [x] .NET PE/CLI public key token extraction from DLLs (`odincs` command)
+- [x] Password = uppercase Rheingold assembly token: `6505EFBDC3E5F324`
+- [x] System.Data.SQLite encryption via `HAS_CODEC` compiled interop (32-bit required)
+- [x] Query via32-bit PowerShell bridge (`db.go`)
+
+### Features
+- [x] `db tables` — list all232 tables
+- [x] `db export <table>` — export table as JSON
+- [x] `db export-all <dir>` — export all tables
+- [x] `db query <sql>` — raw SQL query
+- [x] `db schema <table>` — show table schema
+- [x] `vin <vin>` — VIN lookup via VINRANGES (7.9M records)
+- [x] `lookup pcode <code>` — P-code lookup via CODEASSIGNMENT
+- [x] `lookup fault <code>` — BMW fault code lookup via XEP_FAULTCODES
+- [x] `lookup cc <text>` — Check Control message search via XEP_CCMESSAGE
+- [x] `lookup diag <text>` — Diagnostic code search via XEP_DIAGCODE
+- [x] `report` — Generate markdown diagnostic report from session data
+- [x] `odincs <dll>` — Extract .NET public key tokens from DLLs
+
 ## Phase 4: LLM Integration
 
 Make it trivial to go from ISTA session to AI-assisted diagnosis.
@@ -139,9 +163,22 @@ What's extractable and how:
 | ISTA main log | Text parsing | Session flow, navigation, errors |
 | PsdzServiceHost.log | Text parsing | ENET connection details, SWT tokens |
 | xmlvalueprimitive.sqlite | SQLite + FTS5 | Diagnostic procedures, technical docs (compressed XML) |
-| DiagDocDb.sqlite | Encrypted (blocked) | Main decision-tree DB — encrypted with unknown key |
+| DiagDocDb.sqlite | SQLite via 32-bit PS bridge | Main decision-tree DB — 232 tables, 7.9M VIN ranges (key: `6505EFBDC3E5F324`) |
 | Port 64923 | WCF binary (blocked) | IPC between GUI and services — not HTTP, can't intercept |
 | 169.254.37.25:6801 | DoIP/TCP (blocked) | Raw vehicle comms — would need DoIP protocol implementation |
+
+## Polyglot Satellite Tools
+
+Standalone CLI tools in four languages, orchestrated by the Go app. Each reads JSON data exported from DiagDocDb.
+
+| Tool | Language | Role |
+|------|----------|------|
+| `ista-keyextract` | Odin | Parse .NET PE/CLI metadata to extract assembly public key token (DB password) |
+| `ista-faultlookup` | Gleam/Erlang | Fault code search — BMW codes, P-codes, descriptions |
+| `ista-vinlookup` | Zig | Fast VIN decoder — binary search over 7.9M VINRANGES records |
+| `ista-report` | Nim | Diagnostic report generator — Markdown/text from exported data |
+
+Password handling: tools accept `--keyfile path/to/ista_keys.txt` or `--dll path/to/ISTAGUI.exe` (Odin extracts the key from the DLL). Key file is gitignored and lives on the user's desktop.
 
 ## Technology
 
@@ -152,5 +189,6 @@ What's extractable and how:
 | Encoding | libaom-av1 (yuv444p10le) | Perfect text fidelity at ~30-50 KB per screenshot |
 | Change detection | pHash + pixel diff | Fast rejection of unchanged frames |
 | Session parsing | encoding/xml (stdlib) | No external deps for XML parsing |
+| DB access | 32-bit PowerShell bridge | Required because SQLite.Interop.dll (SEE) is x86 |
 | Config | TOML | Human-readable, comments, designed for config files |
 | Logging | slog + lumberjack | stdlib + rotation |
