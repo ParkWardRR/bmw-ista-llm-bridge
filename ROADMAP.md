@@ -96,16 +96,16 @@ Package a diagnostic session into files an LLM can consume.
 
 ## Phase 3.5: DiagDocDb Access [DONE]
 
-Decrypt and query the encrypted DiagDocDb.sqlite (7.6 GB,232 tables,7.9M VIN ranges).
+Decrypt and query the encrypted DiagDocDb.sqlite (7.6 GB, 232 tables, 7.9M VIN ranges).
 
 ### DB Password Discovery
 - [x] .NET PE/CLI public key token extraction from DLLs (`odincs` command)
-- [x] Password = uppercase Rheingold assembly token: `6505EFBDC3E5F324`
+- [x] Password = uppercase Rheingold assembly strong name public key token
 - [x] System.Data.SQLite encryption via `HAS_CODEC` compiled interop (32-bit required)
-- [x] Query via32-bit PowerShell bridge (`db.go`)
+- [x] Query via 32-bit PowerShell bridge (`db.go`)
 
 ### Features
-- [x] `db tables` — list all232 tables
+- [x] `db tables` — list all 232 tables
 - [x] `db export <table>` — export table as JSON
 - [x] `db export-all <dir>` — export all tables
 - [x] `db query <sql>` — raw SQL query
@@ -117,6 +117,27 @@ Decrypt and query the encrypted DiagDocDb.sqlite (7.6 GB,232 tables,7.9M VIN ran
 - [x] `lookup diag <text>` — Diagnostic code search via XEP_DIAGCODE
 - [x] `report` — Generate markdown diagnostic report from session data
 - [x] `odincs <dll>` — Extract .NET public key tokens from DLLs
+
+## Phase 3.6: Interactive TUI [DONE]
+
+Full-featured terminal UI (Bubble Tea) for interactive diagnostic workflows without memorizing CLI flags.
+
+### Dashboard
+- [x] System status overview (ISTA install, encoder, sessions, DiagDocDb connectivity)
+- [x] Capture statistics (screenshots, total size, session count)
+- [x] Menu-driven navigation with keyboard shortcuts
+
+### Database Views (shown when DiagDocDb is accessible)
+- [x] VIN lookup — text input with async database query and formatted results
+- [x] Fault code lookup — multi-mode search (P-code, fault code, Check Control, diag code) with Tab/number-key mode switching
+- [x] Report generation — auto-generates Markdown diagnostic report from latest session with progress spinner
+
+### UX
+- [x] Bubble Tea state machine with view routing (dashboard → VIN/lookup/report → results)
+- [x] Async database queries with loading spinners
+- [x] Rounded-box result cards with labeled fields
+- [x] Text input with cursor blink, placeholder text, and Esc-to-back navigation
+- [x] Graceful degradation — DB features hidden when DiagDocDb is not accessible
 
 ## Phase 4: LLM Integration
 
@@ -163,7 +184,7 @@ What's extractable and how:
 | ISTA main log | Text parsing | Session flow, navigation, errors |
 | PsdzServiceHost.log | Text parsing | ENET connection details, SWT tokens |
 | xmlvalueprimitive.sqlite | SQLite + FTS5 | Diagnostic procedures, technical docs (compressed XML) |
-| DiagDocDb.sqlite | SQLite via 32-bit PS bridge | Main decision-tree DB — 232 tables, 7.9M VIN ranges (key: `6505EFBDC3E5F324`) |
+| DiagDocDb.sqlite | SQLite via 32-bit PS bridge | Main decision-tree DB — 232 tables, 7.9M VIN ranges (key = Rheingold assembly public key token) |
 | Port 64923 | WCF binary (blocked) | IPC between GUI and services — not HTTP, can't intercept |
 | 169.254.37.25:6801 | DoIP/TCP (blocked) | Raw vehicle comms — would need DoIP protocol implementation |
 

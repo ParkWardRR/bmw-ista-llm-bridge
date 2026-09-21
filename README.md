@@ -84,6 +84,11 @@ That's it — single binary, no runtime dependencies.
 ### Basic Usage
 
 ```bash
+# Launch the interactive TUI (recommended)
+ista-bridge.exe
+
+# Or use individual commands directly:
+
 # 1. Start ISTA and connect to your car
 
 # 2. In another terminal, start capturing
@@ -104,12 +109,34 @@ ista-bridge.exe bundle
 
 ## Commands
 
-### `ista-bridge watch` (default)
+### `ista-bridge` (Interactive TUI)
 
-Captures ISTA screenshots in real-time. This is the default when no subcommand is given.
+Running with no arguments launches the interactive terminal UI:
 
 ```bash
-ista-bridge.exe [watch] [flags]
+ista-bridge.exe
+```
+
+The TUI provides a dashboard with system status, capture stats, and keyboard-driven access to all features:
+
+| Key | Action |
+|---|---|
+| `w` | Start watching / capturing screenshots |
+| `s` | List ISTA diagnostic sessions |
+| `b` | Bundle the latest session for LLM consumption |
+| `v` | VIN lookup (requires DiagDocDb) |
+| `f` | Fault code search (requires DiagDocDb) |
+| `r` | Generate diagnostic report (requires DiagDocDb) |
+| `q` | Quit |
+
+Database features (VIN lookup, fault search, report) appear only when DiagDocDb is accessible. The fault code search supports four modes — P-code, BMW fault code, Check Control messages, and diagnostic codes — switchable with `Tab` or number keys `1`–`4`.
+
+### `ista-bridge watch`
+
+Captures ISTA screenshots in real-time.
+
+```bash
+ista-bridge.exe watch [flags]
 ```
 
 | Flag | Default | What it does |
@@ -491,6 +518,7 @@ See [ROADMAP.md](ROADMAP.md) for the full phased plan.
 | 2. Session Parsing | **Done** | XML parser for ISTA transaction/meta/FASTA files |
 | 3. Session Bundling | **Done** | JSON + Markdown output for LLM consumption |
 | 3.5. DiagDocDb Access | **Done** | Decrypt + query the 7 GB database (232 tables, 7.9M VIN ranges) |
+| 3.6. Interactive TUI | **Done** | Bubble Tea dashboard with VIN lookup, fault search, and report generation |
 | 4. LLM Integration | Planned | `ista-bridge ask` — direct Claude/ChatGPT API integration |
 | 5. Distribution | Planned | GoReleaser, GitHub releases, Winget/Scoop |
 
