@@ -29,10 +29,24 @@ pub type PCode {
 }
 
 pub fn main() {
-  case argv.load().arguments {
+  let args = argv.load().arguments
+  case args {
     [] -> print_usage()
-    args -> run_search(string.join(args, " "))
+    ["--json", ..rest] -> run_search_json(string.join(rest, " "))
+    _ -> {
+      let #(json_mode, search_args) = partition_json_flag(args)
+      case json_mode {
+        True -> run_search_json(string.join(search_args, " "))
+        False -> run_search(string.join(search_args, " "))
+      }
+    }
   }
+}
+
+fn partition_json_flag(args: List(String)) -> #(Bool, List(String)) {
+  let filtered = list.filter(args, fn(a) { a != "--json" && a != "-j" })
+  let has_json = list.length(filtered) != list.length(args)
+  #(has_json, filtered)
 }
 
 fn print_usage() -> Nil {
@@ -69,6 +83,79 @@ fn run_search(query: String) -> Nil {
       }
     }
   }
+}
+
+fn run_search_json(query: String) -> Nil {
+  case resolve_data_dir() {
+    Error(Nil) -> io.println("{\"error\":\"no data directory found\"}")
+    Ok(dir) -> {
+      case load_fault_codes(dir), load_pcodes(dir) {
+        Error(msg), _ ->
+          io.println("{\"error\":\"" <> msg <> "\"}")
+        _, Error(msg) ->
+          io.println("{\"error\":\"" <> msg <> "\"}")
+        Ok(fault_codes), Ok(pcodes) -> {
+          let matched_faults =
+            list.filter(fault_codes, matches_fault_code(_, query))
+          let matched_pcodes = list.filter(pcodes, matches_pcode(_, query))
+
+          let fault_json = list.map(matched_faults, fault_code_to_json)
+          let pcode_json = list.map(matched_pcodes, pcode_to_json)
+
+          let output =
+            "{\"fault_codes\":["
+            <> string.join(fault_json, ",")
+            <> "],\"pcodes\":["
+            <> string.join(pcode_json, ",")
+            <> "]}"
+          io.println(output)
+        }
+      }
+    }
+  }
+}
+
+fn json_string(value: String) -> String {
+  "\""
+  <> string.replace(
+    string.replace(value, "\\", "\\\\"),
+    "\"",
+    "\\\"",
+  )
+  <> "\""
+}
+
+fn fault_code_to_json(fc: FaultCode) -> String {
+  "{\"code\":"
+  <> json_string(fc.code)
+  <> ",\"sae_code\":"
+  <> json_string(fc.sae_code)
+  <> ",\"title\":"
+  <> json_string(fc.title)
+  <> ",\"ecu_variant\":"
+  <> json_string(fc.ecu_variant)
+  <> ",\"ecu_group\":"
+  <> json_string(fc.ecu_group)
+  <> ",\"weighting\":"
+  <> int.to_string(fc.weighting)
+  <> ",\"safety_relevant\":"
+  <> case fc.safety_relevant {
+    True -> "true"
+    False -> "false"
+  }
+  <> "}"
+}
+
+fn pcode_to_json(pc: PCode) -> String {
+  "{\"pcode\":"
+  <> json_string(pc.pcode)
+  <> ",\"fcode\":"
+  <> int.to_string(pc.fcode)
+  <> ",\"device\":"
+  <> json_string(pc.device)
+  <> ",\"title\":"
+  <> json_string(pc.title)
+  <> "}"
 }
 
 /// Prefer a `data` directory (for real/production data) but fall back to

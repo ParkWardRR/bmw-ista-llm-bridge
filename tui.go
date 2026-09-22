@@ -1303,6 +1303,12 @@ func doBundleCmd(logger *slog.Logger, s Session, outDir string) tea.Cmd {
 		if err := s.ParseTrans(); err != nil {
 			logger.Warn("trans parse skipped", "error", err)
 		}
+		if err := s.ParseZipLog(); err != nil {
+			logger.Info("zip.log parse skipped", "reason", err)
+		}
+		if err := s.ParseFASTA(); err != nil {
+			logger.Info("FASTA parse skipped", "reason", err)
+		}
 
 		if err := bundleSession(logger, &s, outDir); err != nil {
 			return bundleResultMsg{err: err.Error()}
@@ -1406,14 +1412,31 @@ func doReportCmd(logger *slog.Logger, s Session, outDir string) tea.Cmd {
 		if err := s.ParseTrans(); err != nil {
 			logger.Warn("trans parse skipped", "error", err)
 		}
+		if err := s.ParseZipLog(); err != nil {
+			logger.Info("zip.log parse skipped", "reason", err)
+		}
+		if err := s.ParseFASTA(); err != nil {
+			logger.Info("FASTA parse skipped", "reason", err)
+		}
 
-		report := generateReport(&s, false)
 		reportDir := filepath.Join(outDir, s.Timestamp.Format("2006-01-02"))
 		os.MkdirAll(reportDir, 0755)
 		reportPath := filepath.Join(reportDir, "report.md")
 
-		if err := os.WriteFile(reportPath, []byte(report), 0644); err != nil {
+		writeReportData(&s, reportDir)
+
+		sessionDate := s.Timestamp.Format("2006-01-02 15:04")
+		if _, err := runTool("report", "--data-dir", reportDir, "--format", "markdown",
+			"--output", reportPath, "--session-date", sessionDate); err != nil {
 			return reportDoneMsg{err: err.Error()}
+		}
+
+		screenshotDir := filepath.Join(outDir, s.Timestamp.Format("2006-01-02"))
+		htmlPath := filepath.Join(reportDir, "report.html")
+		if _, err := runTool("report", "--data-dir", reportDir, "--format", "html",
+			"--output", htmlPath, "--session-date", sessionDate,
+			"--screenshots-dir", screenshotDir); err != nil {
+			logger.Warn("HTML report write failed", "error", err)
 		}
 
 		sessionDesc := s.Timestamp.Format("2006-01-02 15:04") + "  " + s.VIN

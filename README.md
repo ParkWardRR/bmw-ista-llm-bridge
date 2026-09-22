@@ -197,6 +197,9 @@ session_2025-03-15_092200_WBAXXXXXXXX00000/
 ├── vehicle.json      ← VIN, model, engine, I-level, mileage
 ├── ecus.json         ← Full ECU list with software versions
 ├── faults.json       ← All fault codes with status and context
+├── ecukom.json       ← EDIABAS job results from zip.log (if available)
+├── timeline.json     ← Session flow events from IstaOperation.log (if available)
+├── tests.json        ← FASTA test results — pass/fail per test (if available)
 └── screenshots/      ← AVIF captures from the session
 ```
 
@@ -204,10 +207,13 @@ session_2025-03-15_092200_WBAXXXXXXXX00000/
 
 | File | Contents | Typical Size |
 |---|---|---|
-| `summary.md` | LLM-optimized Markdown overview — vehicle table, fault code table, ECU list | ~3-5 KB |
+| `summary.md` | LLM-optimized Markdown overview — vehicle, faults, ECUs, tests, timeline | ~3-10 KB |
 | `vehicle.json` | VIN, brand, model series, engine, transmission, I-level, mileage, market | ~0.5 KB |
 | `ecus.json` | Every ECU: name, variant, bus, protocol, supplier, software IDs, fault count | ~5-15 KB |
 | `faults.json` | Every DTC: code, description, status (active/stored), warning lamp, mileage | ~1-5 KB |
+| `ecukom.json` | Every EDIABAS job sent to every ECU with results (from zip.log) | ~50-500 KB |
+| `timeline.json` | Key session events: connect, identify, fault read, errors (from IstaOperation.log) | ~5-20 KB |
+| `tests.json` | FASTA test results: test name, pass/fail/skipped status | ~2-10 KB |
 | `screenshots/` | Chronological AVIF captures of the ISTA GUI | ~30-50 KB each |
 
 ### `ista-bridge vin <vin>`
@@ -248,15 +254,23 @@ ista-bridge.exe lookup pcode P0420 --json
 
 ### `ista-bridge report [date]`
 
-Generate a Markdown diagnostic report from an ISTA session.
+Generate a diagnostic report from an ISTA session. Outputs Markdown by default; add `--html` for a self-contained HTML report with embedded CSS, stat cards, and base64-inlined screenshots.
 
 ```bash
-# Latest session
+# Latest session — Markdown
 ista-bridge.exe report
 
 # Specific date
 ista-bridge.exe report 2026-09-20
+
+# HTML report (standalone, light/dark theme, print-friendly)
+ista-bridge.exe report --html
+
+# Both Markdown and HTML
+ista-bridge.exe report 2026-09-20 --html
 ```
+
+The HTML report includes vehicle info, fault codes, FASTA test results (with pass/fail badges), session timeline, ECU list, software versions, and inline screenshots — all in a single `.html` file with no external dependencies.
 
 ### `ista-bridge db <subcommand>`
 
@@ -295,18 +309,31 @@ The key can be extracted automatically from any ISTA DLL using the `odincs` comm
 
 ---
 
-## Polyglot Satellite Tools
+## The Right Language for the Right Job
 
-Four standalone CLI tools in different languages, each handling a specific domain. Built for fun and to demonstrate polyglot integration.
+Each component uses the language best suited to its task. Go orchestrates the system and provides the TUI, but the heavy lifting is delegated to purpose-built tools:
 
-| Tool | Language | Purpose |
+| Tool | Language | Why this language |
 |---|---|---|
-| `ista-keyextract` | **Odin** | Parse .NET PE/CLI metadata to extract the DB encryption key |
-| `ista-faultlookup` | **Gleam** (Erlang/BEAM) | Fault code and P-code search with partial matching |
-| `ista-vinlookup` | **Zig** | Fast VIN decoder with binary search over VINRANGES data |
-| `ista-report` | **Nim** | Diagnostic report generator (Markdown/text) from JSON data |
+| `ista-keyextract` | **Odin** | Low-level PE/CLI binary parsing — Odin's manual memory control and bit manipulation make it ideal for walking .NET metadata tables and computing SHA-1 key tokens without a runtime |
+| `ista-faultlookup` | **Gleam** (Erlang/BEAM) | Pattern matching and immutable data — Gleam's type-safe functional style is a natural fit for filtering and searching across fault code datasets |
+| `ista-vinlookup` | **Zig** | Performance-critical search — Zig's zero-overhead sorted binary search over 7.9M VIN ranges runs in microseconds with no GC pauses |
+| `ista-report` | **Nim** | All report rendering — Markdown, HTML, and LLM summaries. Nim's expressive string handling and `base64` stdlib produce self-contained HTML reports with embedded screenshots, compiled to a native binary |
+| `ista-bridge` | **Go** | System orchestration — Win32 capture, TUI, encrypted DB access, session parsing, and calling the right tool for each task |
 
-All tools accept `--keyfile` or `--dll` flags for password discovery. Source code is in the `polyglot/` directory.
+### How it works
+
+Go handles what only Go can do: Win32 screenshot capture (syscalls), the Bubble Tea TUI, and querying the encrypted DiagDocDb (requires a 32-bit .NET SQLite DLL via PowerShell bridge). Everything else is delegated:
+
+1. `ista-bridge db export-lookup` — Go extracts lookup data from DiagDocDb to JSON
+2. VIN lookups use the **Zig** binary (fast binary search over exported data)
+3. Fault lookups use the **Gleam** tool (pattern matching over exported data)
+4. Key extraction uses the **Odin** tool (native PE parsing, no PowerShell needed)
+5. All report rendering uses the **Nim** tool — Markdown, HTML (with base64-inlined screenshots), and LLM-optimized summaries
+
+If the satellite tools aren't built or lookup data isn't exported, Go falls back to its PowerShell bridge for database queries.
+
+Source code is in the `polyglot/` directory.
 
 ---
 
@@ -485,14 +512,17 @@ No CGo. No C compiler needed. Pure Go + FFmpeg.
 bmw-ista-llm-bridge/
 ├── main.go          # Entry point, subcommand routing, capture loop
 ├── tui.go           # Bubble Tea interactive terminal UI
+├── orchestrate.go   # Satellite tool finder and runner
+├── session.go       # ISTA session discovery and XML parsing
+├── bundle.go        # LLM-friendly session bundling (JSON + summary)
+├── ziplog.go        # zip.log extraction, ECUKom XML, timeline parsing
+├── fasta.go         # FASTA test result and behavioral data parsing
 ├── db.go            # DiagDocDb access via 32-bit PowerShell bridge
 ├── cmd_db.go        # Database subcommands (tables, export, query, schema)
-├── cmd_vin.go       # VIN lookup command
-├── cmd_lookup.go    # Fault code / P-code / CC message lookup
-├── cmd_report.go    # Markdown diagnostic report generator
-├── cmd_odincs.go    # .NET public key token extraction
-├── session.go       # ISTA session discovery and XML parsing
-├── bundle.go        # LLM-friendly session bundling (JSON + Markdown)
+├── cmd_vin.go       # VIN lookup (delegates to Zig)
+├── cmd_lookup.go    # Fault/P-code lookup (delegates to Gleam)
+├── cmd_report.go    # Report command (delegates to Nim)
+├── cmd_odincs.go    # Key extraction (delegates to Odin)
 ├── win32.go         # Win32 API: window enumeration, PrintWindow, BitBlt, DPI
 ├── encode.go        # FFmpeg encoder probing (QSV → NVENC → AMF → CPU)
 ├── hasher.go        # Perceptual hash (pHash) for fast change rejection
@@ -502,7 +532,7 @@ bmw-ista-llm-bridge/
 │   ├── odin/        # PE/CLI key extractor (Odin)
 │   ├── gleam/       # Fault code lookup (Gleam/Erlang)
 │   ├── zig/         # VIN decoder with binary search (Zig)
-│   └── nim/         # Report generator (Nim)
+│   └── nim/         # Report generator — Markdown, HTML, summary (Nim)
 └── demo/            # TUI demo GIFs and rendering scripts
 ```
 

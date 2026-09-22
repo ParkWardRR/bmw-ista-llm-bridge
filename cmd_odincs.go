@@ -1,20 +1,19 @@
 package main
 
 import (
-	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 )
 
 func runOdincs(args []string) {
 	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "Usage: istahelp odincs <dll-or-directory>")
+		fmt.Fprintln(os.Stderr, "Usage: ista-bridge odincs <dll-or-directory>")
 		fmt.Fprintln(os.Stderr)
 		fmt.Fprintln(os.Stderr, "Extracts .NET assembly public key tokens from PE/CLI DLLs.")
-		fmt.Fprintln(os.Stderr, "Uses 32-bit PowerShell to load the assembly and read the token.")
+		fmt.Fprintln(os.Stderr, "Uses the Odin-based ista-keyextract tool for native PE parsing.")
 		os.Exit(1)
 	}
 
@@ -33,7 +32,8 @@ func runOdincs(args []string) {
 			os.Exit(1)
 		}
 		for _, e := range entries {
-			if !e.IsDir() && strings.EqualFold(filepath.Ext(e.Name()), ".dll") {
+			ext := strings.ToLower(filepath.Ext(e.Name()))
+			if !e.IsDir() && (ext == ".dll" || ext == ".exe") {
 				dlls = append(dlls, filepath.Join(target, e.Name()))
 			}
 		}
@@ -41,10 +41,8 @@ func runOdincs(args []string) {
 		dlls = append(dlls, target)
 	}
 
-	ps32 := `C:\Windows\SysWOW64\WindowsPowerShell\v1.0\powershell.exe`
-
 	for _, dll := range dlls {
-		token, err := extractTokenPS32(ps32, dll)
+		token, err := extractKeyWithOdin(dll)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "%-55s ERROR: %v\n", filepath.Base(dll), err)
 			continue
@@ -57,28 +55,23 @@ func runOdincs(args []string) {
 	}
 }
 
-func extractTokenPS32(ps32, dllPath string) (string, error) {
-	psScript := fmt.Sprintf(`try {
-  $dll = [System.Reflection.Assembly]::LoadFile('%s')
-  $token = $dll.GetName().GetPublicKeyToken()
-  if ($token) { [BitConverter]::ToString($token).Replace('-','').ToLower() }
-} catch { "" }`, dllPath)
+type keyExtractResult struct {
+	Source        string `json:"source"`
+	Path          string `json:"path"`
+	PublicKeyToken string `json:"public_key_token"`
+	DBPassword    string `json:"db_password"`
+}
 
-	cmd := exec.Command(ps32, "-NoProfile", "-NonInteractive", "-Command", psScript)
-	out, err := cmd.Output()
+func extractKeyWithOdin(dllPath string) (string, error) {
+	out, err := runTool("keyextract", "--dll", dllPath)
 	if err != nil {
-		return "", fmt.Errorf("ps32: %w", err)
+		return "", err
 	}
 
-	result := strings.TrimSpace(string(out))
-	if result == "" {
-		return "", nil
+	var result keyExtractResult
+	if err := json.Unmarshal(out, &result); err != nil {
+		return "", fmt.Errorf("parse keyextract output: %w", err)
 	}
 
-	// Validate it looks like a hex token
-	if _, err := hex.DecodeString(result); err != nil {
-		return "", fmt.Errorf("invalid hex token: %s", result)
-	}
-
-	return result, nil
+	return result.PublicKeyToken, nil
 }

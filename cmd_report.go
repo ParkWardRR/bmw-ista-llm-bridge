@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 )
 
 func runReport(args []string) {
@@ -13,12 +12,12 @@ func runReport(args []string) {
 
 	sessionDate := ""
 	outDir := cfg.Output.Directory
-	jsonOutput := false
+	htmlOutput := false
 
 	for i, a := range args {
 		switch a {
-		case "--json", "-j":
-			jsonOutput = true
+		case "--html":
+			htmlOutput = true
 		case "--out", "-o":
 			if i+1 < len(args) {
 				outDir = args[i+1]
@@ -41,7 +40,6 @@ func runReport(args []string) {
 		os.Exit(1)
 	}
 
-	// Find target session
 	var target *Session
 	if sessionDate != "" {
 		for i := range sessions {
@@ -64,140 +62,65 @@ func runReport(args []string) {
 	if err := target.ParseTrans(); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: trans parse failed: %v\n", err)
 	}
+	if err := target.ParseZipLog(); err != nil {
+		fmt.Fprintf(os.Stderr, "Info: zip.log: %v\n", err)
+	}
+	if err := target.ParseFASTA(); err != nil {
+		fmt.Fprintf(os.Stderr, "Info: FASTA: %v\n", err)
+	}
 
-	// Generate report
-	report := generateReport(target, jsonOutput)
-
-	// Write output
 	reportDir := filepath.Join(outDir, target.Timestamp.Format("2006-01-02"))
 	os.MkdirAll(reportDir, 0755)
 
-	reportPath := filepath.Join(reportDir, "report.md")
-	if err := os.WriteFile(reportPath, []byte(report), 0644); err != nil {
-		fmt.Fprintf(os.Stderr, "Error writing report: %v\n", err)
+	writeReportData(target, reportDir)
+
+	toolArgs := []string{
+		"--data-dir", reportDir,
+		"--format", "markdown",
+		"--output", filepath.Join(reportDir, "report.md"),
+		"--session-date", target.Timestamp.Format("2006-01-02 15:04"),
+	}
+	if _, err := runTool("report", toolArgs...); err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating report: %v\n", err)
 		os.Exit(1)
 	}
+	fmt.Printf("Report written to: %s\n", filepath.Join(reportDir, "report.md"))
 
-	fmt.Printf("Report written to: %s\n", reportPath)
+	if htmlOutput {
+		screenshotDir := filepath.Join(outDir, target.Timestamp.Format("2006-01-02"))
+		htmlArgs := []string{
+			"--data-dir", reportDir,
+			"--format", "html",
+			"--output", filepath.Join(reportDir, "report.html"),
+			"--session-date", target.Timestamp.Format("2006-01-02 15:04"),
+			"--screenshots-dir", screenshotDir,
+		}
+		if _, err := runTool("report", htmlArgs...); err != nil {
+			fmt.Fprintf(os.Stderr, "Error generating HTML report: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("HTML report written to: %s\n", filepath.Join(reportDir, "report.html"))
+	}
 }
 
-func generateReport(s *Session, jsonMode bool) string {
-	var b strings.Builder
+func writeReportData(s *Session, dir string) {
+	vehicle := buildVehicle(s)
+	ecus := buildECUs(s)
+	faults := buildFaults(s)
 
-	b.WriteString("# ISTA Diagnostic Report\n\n")
-	b.WriteString(fmt.Sprintf("**Generated:** %s\n", time.Now().Format("2006-01-02 15:04:05")))
-	b.WriteString(fmt.Sprintf("**Session:** %s\n\n", s.Timestamp.Format("2006-01-02 15:04")))
+	writeJSON(filepath.Join(dir, "vehicle.json"), vehicle)
+	writeJSON(filepath.Join(dir, "ecus.json"), ecus)
+	writeJSON(filepath.Join(dir, "faults.json"), faults)
 
-	// Vehicle Info
-	b.WriteString("## Vehicle Information\n\n")
-	if s.Meta != nil {
-		b.WriteString(fmt.Sprintf("- **VIN:** %s\n", s.Meta.VIN17))
-		b.WriteString(fmt.Sprintf("- **Brand:** %s\n", s.Meta.Features.Brand))
-		b.WriteString(fmt.Sprintf("- **Series:** %s\n", s.Meta.Features.Series))
-		b.WriteString(fmt.Sprintf("- **Model Series:** %s\n", s.Meta.Features.ModelSeries))
-		b.WriteString(fmt.Sprintf("- **Body:** %s\n", s.Meta.Features.Body))
-		b.WriteString(fmt.Sprintf("- **Engine:** %s\n", s.Meta.Features.Engine))
-		b.WriteString(fmt.Sprintf("- **Transmission:** %s\n", s.Meta.Features.Transmission))
-		b.WriteString(fmt.Sprintf("- **Model Year:** %s\n", s.Meta.Features.ModelYear))
-		b.WriteString(fmt.Sprintf("- **Market:** %s\n", s.Meta.Features.Market))
-		b.WriteString(fmt.Sprintf("- **Mileage:** %d km\n", s.Meta.Mileage))
-		b.WriteString(fmt.Sprintf("- **Communication:** %s\n", s.Meta.CommType))
-		b.WriteString(fmt.Sprintf("- **Dealer:** %s\n", s.Meta.Dealer))
-		b.WriteString(fmt.Sprintf("- **Session State:** %s\n", s.Meta.State))
+	if s.FASTA != nil && len(s.FASTA.Tests) > 0 {
+		writeJSON(filepath.Join(dir, "tests.json"), s.FASTA.Tests)
 	}
-
-	if s.Trans != nil {
-		b.WriteString(fmt.Sprintf("- **I-Level:** %s\n", s.Trans.ILevel))
-		b.WriteString(fmt.Sprintf("- **Mileage (trans):** %d %s\n", s.Trans.Mileage, s.Trans.Unit))
-	}
-
-	// Fault Codes
-	b.WriteString("\n## Fault Codes\n\n")
-	faults := s.AllFaults()
-	if len(faults) == 0 {
-		b.WriteString("No fault codes found.\n")
-	} else {
-		b.WriteString(fmt.Sprintf("Found %d fault code(s):\n\n", len(faults)))
-		b.WriteString("| ECU | Bus | Code | Description | Status | Warning |\n")
-		b.WriteString("|-----|-----|------|-------------|--------|--------|\n")
-		for _, f := range faults {
-			pcode := f.DTC.PCode
-			if pcode == "" {
-				pcode = f.DTC.SAECode
-			}
-			if pcode == "" {
-				pcode = f.DTC.HexCode
-			}
-			desc := f.DTC.Description
-			if len(desc) > 60 {
-				desc = desc[:57] + "..."
-			}
-			b.WriteString(fmt.Sprintf("| %s | %s | %s | %s | %s | %s |\n",
-				f.ECUName, f.Bus, pcode, desc, f.DTC.StatusText, f.DTC.WarningText))
+	if s.ZipLogData != nil {
+		if s.ZipLogData.ECUKom != nil {
+			writeJSON(filepath.Join(dir, "ecukom.json"), s.ZipLogData.ECUKom)
+		}
+		if len(s.ZipLogData.Timeline) > 0 {
+			writeJSON(filepath.Join(dir, "timeline.json"), s.ZipLogData.Timeline)
 		}
 	}
-
-	// ECU List
-	b.WriteString("\n## ECU List\n\n")
-	if s.Trans != nil && len(s.Trans.ECUs) > 0 {
-		b.WriteString(fmt.Sprintf("Found %d ECU(s):\n\n", len(s.Trans.ECUs)))
-		b.WriteString("| ECU | Full Name | Bus | SGBD | Protocol | Status |\n")
-		b.WriteString("|-----|-----------|-----|------|----------|--------|\n")
-		for _, ecu := range s.Trans.ECUs {
-			status := ecu.CommSuccess
-			if status == "" {
-				status = "—"
-			}
-			name := ecu.TreeName
-			if name == "" {
-				name = ecu.ShortName
-			}
-			b.WriteString(fmt.Sprintf("| %s | %s | %s | %s | %s | %s |\n",
-				name, ecu.FullName, ecu.Bus, ecu.SGBD, ecu.Protocol, status))
-		}
-	} else {
-		b.WriteString("No ECU data available.\n")
-	}
-
-	// Software Versions
-	if s.Trans != nil {
-		b.WriteString("\n## Software Versions (I-Level)\n\n")
-		b.WriteString(fmt.Sprintf("- **I-Level:** %s\n", s.Trans.ILevel))
-		if len(s.Trans.ECUs) > 0 {
-			for _, ecu := range s.Trans.ECUs {
-				if len(ecu.SVK.SGBMIDs) > 0 {
-					b.WriteString(fmt.Sprintf("\n### %s\n", ecu.TreeName))
-					for _, id := range ecu.SVK.SGBMIDs {
-						b.WriteString(fmt.Sprintf("- %s\n", id))
-					}
-					if ecu.SVK.ProgDate != "" {
-						b.WriteString(fmt.Sprintf("- Last programmed: %s\n", ecu.SVK.ProgDate))
-					}
-				}
-			}
-		}
-	}
-
-	// Session Files
-	b.WriteString("\n## Session Files\n\n")
-	if s.TransFile != "" {
-		b.WriteString(fmt.Sprintf("- Transaction: `%s`\n", s.TransFile))
-	}
-	if s.MetaFile != "" {
-		b.WriteString(fmt.Sprintf("- Metadata: `%s`\n", s.MetaFile))
-	}
-	if s.ZipLog != "" {
-		b.WriteString(fmt.Sprintf("- Log bundle: `%s`\n", s.ZipLog))
-	}
-	if s.BehDat != "" {
-		b.WriteString(fmt.Sprintf("- Behavioral data: `%s`\n", s.BehDat))
-	}
-	if s.FstDat != "" {
-		b.WriteString(fmt.Sprintf("- Test data: `%s`\n", s.FstDat))
-	}
-
-	b.WriteString("\n---\n")
-	b.WriteString("*Generated by ista-bridge*\n")
-
-	return b.String()
 }

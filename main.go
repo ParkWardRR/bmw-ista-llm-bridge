@@ -120,6 +120,12 @@ func runBundle(args []string) {
 	if err := target.ParseTrans(); err != nil {
 		logger.Warn("trans parse failed (continuing)", "error", err)
 	}
+	if err := target.ParseZipLog(); err != nil {
+		logger.Info("zip.log parse skipped", "reason", err)
+	}
+	if err := target.ParseFASTA(); err != nil {
+		logger.Info("FASTA parse skipped", "reason", err)
+	}
 
 	if err := bundleSession(logger, target, *outDir); err != nil {
 		logger.Error("bundle failed", "error", err)

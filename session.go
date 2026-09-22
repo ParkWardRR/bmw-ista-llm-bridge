@@ -23,8 +23,10 @@ type Session struct {
 	BehDat    string
 	FstDat    string
 
-	Meta  *MetaData
-	Trans *TransData
+	Meta       *MetaData
+	Trans      *TransData
+	ZipLogData *ZipLogContents
+	FASTA      *FASTAData
 }
 
 // MetaData from RG_META_*.xml
@@ -239,4 +241,37 @@ type ECUFault struct {
 	ECUFullName string
 	Bus         string
 	DTC         DTC
+}
+
+func (s *Session) ParseZipLog() error {
+	if s.ZipLog == "" {
+		return fmt.Errorf("no zip.log file")
+	}
+	zlc, err := parseZipLog(s.ZipLog)
+	if err != nil {
+		return err
+	}
+	s.ZipLogData = zlc
+	return nil
+}
+
+func (s *Session) ParseFASTA() error {
+	s.FASTA = &FASTAData{}
+	if s.FstDat != "" {
+		tests, err := parseFSTATests(s.FstDat)
+		if err == nil {
+			s.FASTA.Tests = tests
+		}
+	}
+	if s.BehDat != "" {
+		actions, err := parseFSTABehavior(s.BehDat)
+		if err == nil {
+			s.FASTA.Actions = actions
+		}
+	}
+	if len(s.FASTA.Tests) == 0 && len(s.FASTA.Actions) == 0 {
+		s.FASTA = nil
+		return fmt.Errorf("no FASTA data found")
+	}
+	return nil
 }

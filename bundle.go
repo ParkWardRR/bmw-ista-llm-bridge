@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"text/template"
 	"time"
 )
 
@@ -72,44 +71,110 @@ func bundleSession(logger *slog.Logger, s *Session, outDir string) error {
 		return err
 	}
 
-	if err := writeSummary(filepath.Join(bundleDir, "summary.md"), s, vehicle, ecus, faults); err != nil {
+	var ecukomJobs int
+	if s.ZipLogData != nil && s.ZipLogData.ECUKom != nil {
+		if err := writeJSON(filepath.Join(bundleDir, "ecukom.json"), s.ZipLogData.ECUKom); err != nil {
+			logger.Warn("ecukom.json write failed", "error", err)
+		} else {
+			ecukomJobs = len(s.ZipLogData.ECUKom.Jobs)
+		}
+	}
+
+	var timelineEvents int
+	if s.ZipLogData != nil && len(s.ZipLogData.Timeline) > 0 {
+		if err := writeJSON(filepath.Join(bundleDir, "timeline.json"), s.ZipLogData.Timeline); err != nil {
+			logger.Warn("timeline.json write failed", "error", err)
+		} else {
+			timelineEvents = len(s.ZipLogData.Timeline)
+		}
+	}
+
+	var testCount int
+	if s.FASTA != nil && len(s.FASTA.Tests) > 0 {
+		if err := writeJSON(filepath.Join(bundleDir, "tests.json"), s.FASTA.Tests); err != nil {
+			logger.Warn("tests.json write failed", "error", err)
+		} else {
+			testCount = len(s.FASTA.Tests)
+		}
+	}
+
+	if err := writeSummary(bundleDir, s); err != nil {
 		return err
 	}
 
-	// Copy screenshots if they exist for this session date
-	screenshotDir := filepath.Join(outDir, s.Timestamp.Format("2006-01-02"))
-	if info, err := os.Stat(screenshotDir); err == nil && info.IsDir() {
-		dstScreenshots := filepath.Join(bundleDir, "screenshots")
-		if err := os.MkdirAll(dstScreenshots, 0755); err == nil {
-			entries, _ := os.ReadDir(screenshotDir)
-			for _, e := range entries {
-				if e.IsDir() {
-					continue
-				}
-				src := filepath.Join(screenshotDir, e.Name())
-				dst := filepath.Join(dstScreenshots, e.Name())
-				data, err := os.ReadFile(src)
-				if err == nil {
-					os.WriteFile(dst, data, 0644)
-				}
-			}
-			logger.Info("screenshots copied", "count", len(entries), "from", screenshotDir)
-		}
-	}
+	screenshotCount := copyScreenshots(logger, outDir, bundleDir, s.Timestamp)
 
 	logger.Info("bundle created",
 		"path", bundleDir,
 		"ecus", len(ecus),
 		"faults", len(faults),
+		"ecukom_jobs", ecukomJobs,
+		"timeline_events", timelineEvents,
+		"tests", testCount,
 	)
 	fmt.Printf("Bundle: %s\n", bundleDir)
 	fmt.Printf("  Vehicle: %s %s %s (%s) — %d km\n", vehicle.ModelYear, vehicle.Brand, vehicle.ModelSeries, vehicle.Engine, vehicle.Mileage)
 	fmt.Printf("  I-Level: %s\n", vehicle.ILevel)
 	fmt.Printf("  ECUs: %d\n", len(ecus))
 	fmt.Printf("  Faults: %d\n", len(faults))
-	fmt.Printf("  Files: vehicle.json, ecus.json, faults.json, summary.md\n")
+	if ecukomJobs > 0 {
+		fmt.Printf("  EDIABAS jobs: %d\n", ecukomJobs)
+	}
+	if timelineEvents > 0 {
+		fmt.Printf("  Timeline events: %d\n", timelineEvents)
+	}
+	if testCount > 0 {
+		fmt.Printf("  FASTA tests: %d\n", testCount)
+	}
+	if screenshotCount > 0 {
+		fmt.Printf("  Screenshots: %d\n", screenshotCount)
+	}
+
+	files := "vehicle.json, ecus.json, faults.json, summary.md"
+	if ecukomJobs > 0 {
+		files += ", ecukom.json"
+	}
+	if timelineEvents > 0 {
+		files += ", timeline.json"
+	}
+	if testCount > 0 {
+		files += ", tests.json"
+	}
+	fmt.Printf("  Files: %s\n", files)
 
 	return nil
+}
+
+func copyScreenshots(logger *slog.Logger, outDir, bundleDir string, ts time.Time) int {
+	screenshotDir := filepath.Join(outDir, ts.Format("2006-01-02"))
+	info, err := os.Stat(screenshotDir)
+	if err != nil || !info.IsDir() {
+		return 0
+	}
+
+	dstScreenshots := filepath.Join(bundleDir, "screenshots")
+	if err := os.MkdirAll(dstScreenshots, 0755); err != nil {
+		return 0
+	}
+
+	entries, _ := os.ReadDir(screenshotDir)
+	count := 0
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		src := filepath.Join(screenshotDir, e.Name())
+		dst := filepath.Join(dstScreenshots, e.Name())
+		data, err := os.ReadFile(src)
+		if err == nil {
+			os.WriteFile(dst, data, 0644)
+			count++
+		}
+	}
+	if count > 0 {
+		logger.Info("screenshots copied", "count", count, "from", screenshotDir)
+	}
+	return count
 }
 
 func buildVehicle(s *Session) BundleVehicle {
@@ -192,86 +257,22 @@ func writeJSON(path string, v any) error {
 	return os.WriteFile(path, data, 0644)
 }
 
-var summaryTmpl = template.Must(template.New("summary").Parse(`# ISTA Diagnostic Session
-
-> Feed this file to Claude or ChatGPT for AI-assisted vehicle troubleshooting.
-> The JSON files in this bundle have full structured data.
-
-## Vehicle
-
-| Field | Value |
-|-------|-------|
-| VIN | {{.Vehicle.VIN}} |
-| Brand | {{.Vehicle.Brand}} |
-| Model | {{.Vehicle.ModelYear}} {{.Vehicle.ModelSeries}} ({{.Vehicle.Body}}) |
-| Engine | {{.Vehicle.Engine}} |
-| Transmission | {{.Vehicle.Transmission}} |
-| Market | {{.Vehicle.Market}} |
-| I-Level | {{.Vehicle.ILevel}} |
-| Mileage | {{.Vehicle.Mileage}} km |
-| Connection | {{.Vehicle.CommType}} |
-
-## Session
-
-| Field | Value |
-|-------|-------|
-| Date | {{.Date}} |
-| Duration | {{.Duration}} |
-| ECUs | {{.ECUCount}} |
-| Faults | {{.FaultCount}} |
-
-## Fault Codes ({{.FaultCount}} total)
-{{if .Faults}}
-| ECU | Code | Description | Status |
-|-----|------|-------------|--------|
-{{- range .Faults}}
-| {{.ECU}} | {{.Code}} | {{.Description}} | {{.Status}} |
-{{- end}}
-{{else}}
-No fault codes stored.
-{{end}}
-
-## ECU List ({{.ECUCount}} total)
-
-| Name | Full Name | Bus | Protocol | Supplier | Faults |
-|------|-----------|-----|----------|----------|--------|
-{{- range .ECUs}}
-| {{.Name}} | {{.FullName}} | {{.Bus}} | {{.Protocol}} | {{.Supplier}} | {{.FaultCount}} |
-{{- end}}
-`))
-
-type summaryData struct {
-	Vehicle    BundleVehicle
-	ECUs       []BundleECU
-	Faults     []BundleFault
-	ECUCount   int
-	FaultCount int
-	Date       string
-	Duration   string
-}
-
-func writeSummary(path string, s *Session, v BundleVehicle, ecus []BundleECU, faults []BundleFault) error {
-	data := summaryData{
-		Vehicle:    v,
-		ECUs:       ecus,
-		Faults:     faults,
-		ECUCount:   len(ecus),
-		FaultCount: len(faults),
-		Date:       s.Timestamp.Format("2006-01-02 15:04"),
+func writeSummary(bundleDir string, s *Session) error {
+	args := []string{
+		"--data-dir", bundleDir,
+		"--format", "summary",
+		"--output", filepath.Join(bundleDir, "summary.md"),
+		"--session-date", s.Timestamp.Format("2006-01-02 15:04"),
 	}
 
 	if s.Meta != nil && s.Meta.Start != "" && s.Meta.End != "" {
 		start, e1 := time.Parse(time.RFC3339Nano, s.Meta.Start)
 		end, e2 := time.Parse(time.RFC3339Nano, s.Meta.End)
 		if e1 == nil && e2 == nil {
-			data.Duration = end.Sub(start).Round(time.Minute).String()
+			args = append(args, "--session-duration", end.Sub(start).Round(time.Minute).String())
 		}
 	}
 
-	f, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	return summaryTmpl.Execute(f, data)
+	_, err := runTool("report", args...)
+	return err
 }

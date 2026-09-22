@@ -88,11 +88,22 @@ Package a diagnostic session into files an LLM can consume.
 - [x] Auto-copy screenshots from matching session date folder
 
 ### TODO
-- [ ] Extract and include ECUKom data from zip.log (EDIABAS job results)
-- [ ] Include FASTA test results (pass/fail per test)
-- [ ] `timeline.json` — what happened when (session flow from IstaOperation.log)
+- [x] Extract and include ECUKom data from zip.log (EDIABAS job results)
+- [x] Include FASTA test results (pass/fail per test)
+- [x] `timeline.json` — what happened when (session flow from IstaOperation.log)
 - [ ] Estimate token count for the bundle
 - [ ] Auto-truncate if bundle exceeds LLM context limits
+
+### New Bundle Files
+- `ecukom.json` — EDIABAS job results extracted from zip.log ECUKom XML
+- `timeline.json` — key session events parsed from IstaOperation.log
+- `tests.json` — FASTA test results (pass/fail/skipped)
+
+### HTML Diagnostic Report
+- [x] `ista-bridge report --html` generates standalone HTML report
+- [x] Self-contained single-file HTML with embedded CSS (light/dark theme)
+- [x] Base64-inlined screenshots, stat cards, styled tables
+- [x] Includes all data: vehicle, faults, ECUs, FASTA tests, timeline, software versions
 
 ## Phase 3.5: DiagDocDb Access [DONE]
 
@@ -188,24 +199,34 @@ What's extractable and how:
 | Port 64923 | WCF binary (blocked) | IPC between GUI and services — not HTTP, can't intercept |
 | 169.254.37.25:6801 | DoIP/TCP (blocked) | Raw vehicle comms — would need DoIP protocol implementation |
 
-## Polyglot Satellite Tools
+## The Right Language for the Right Job
 
-Standalone CLI tools in four languages, orchestrated by the Go app. Each reads JSON data exported from DiagDocDb.
+Go is the orchestrator — it handles Win32 capture, TUI, and encrypted DB access. The real work is delegated to purpose-built tools in the language best suited to each task:
 
-| Tool | Language | Role |
-|------|----------|------|
-| `ista-keyextract` | Odin | Parse .NET PE/CLI metadata to extract assembly public key token (DB password) |
-| `ista-faultlookup` | Gleam/Erlang | Fault code search — BMW codes, P-codes, descriptions |
-| `ista-vinlookup` | Zig | Fast VIN decoder — binary search over 7.9M VINRANGES records |
-| `ista-report` | Nim | Diagnostic report generator — Markdown/text from exported data |
+| Tool | Language | Why |
+|------|----------|-----|
+| `ista-keyextract` | Odin | Low-level PE/CLI binary parsing — manual memory, bit manipulation, no runtime |
+| `ista-faultlookup` | Gleam/Erlang | Pattern matching + immutable data — natural fit for searching fault datasets |
+| `ista-vinlookup` | Zig | Zero-overhead binary search — microsecond VIN lookups over 7.9M ranges |
+| `ista-report` | Nim | All report rendering — Markdown, HTML (base64 screenshots), LLM summaries from JSON |
 
-Password handling: tools accept `--keyfile path/to/ista_keys.txt` or `--dll path/to/ISTAGUI.exe` (Odin extracts the key from the DLL). Key file is gitignored and lives on the user's desktop.
+### Integration
+
+Go discovers and calls the satellite tools at runtime. If a tool binary is found:
+- `odincs` command → calls `ista-keyextract` (Odin) instead of 32-bit PowerShell
+- `vin` command → calls `ista-vinlookup` (Zig) against exported VINRANGES data
+- `lookup` command → calls `ista-faultlookup` (Gleam) against exported fault data
+- `report`, `bundle` → calls `ista-report` (Nim) for Markdown, HTML, and summary generation
+
+For database queries, Go falls back to its PowerShell bridge when satellite tools aren't available.
+
+`ista-bridge db export-lookup` exports the lookup data from DiagDocDb to JSON files that the satellite tools consume.
 
 ## Technology
 
 | Component | Choice | Why |
 |-----------|--------|-----|
-| Language | Go | Single binary, no runtime, great Win32 syscall support |
+| Orchestration | Go | Win32 syscalls, TUI, encrypted DB access, system glue |
 | Capture | PrintWindow/BitBlt | Works for WPF apps, no driver needed |
 | Encoding | libaom-av1 (yuv444p10le) | Perfect text fidelity at ~30-50 KB per screenshot |
 | Change detection | pHash + pixel diff | Fast rejection of unchanged frames |

@@ -9,16 +9,29 @@ import (
 
 func runDB(args []string) {
 	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "Usage: istahelp db <subcommand>")
+		fmt.Fprintln(os.Stderr, "Usage: ista-bridge db <subcommand>")
 		fmt.Fprintln(os.Stderr)
 		fmt.Fprintln(os.Stderr, "Subcommands:")
 		fmt.Fprintln(os.Stderr, "  tables              List all tables in DiagDocDb")
 		fmt.Fprintln(os.Stderr, "  export <table>      Export a table as JSON")
 		fmt.Fprintln(os.Stderr, "  export-all <dir>    Export all tables to directory")
+		fmt.Fprintln(os.Stderr, "  export-lookup       Export lookup data for satellite tools")
 		fmt.Fprintln(os.Stderr, "  query <sql>         Run raw SQL query")
 		fmt.Fprintln(os.Stderr, "  schema <table>      Show table schema")
 		fmt.Fprintln(os.Stderr, "  count <table>       Count rows in a table")
 		os.Exit(1)
+	}
+
+	switch args[0] {
+	case "export-lookup":
+		cfg := loadConfig()
+		if err := exportLookupData(cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("\nLookup data exported. VIN and fault lookups will now use")
+		fmt.Println("the Zig and Gleam satellite tools for faster offline search.")
+		return
 	}
 
 	db := NewDiagDB()
