@@ -1,8 +1,8 @@
 # Ecosystem Integration Plan
 
-How ista-bridge relates to the broader BMW open-source diagnostic ecosystem — what we can absorb, what we can contribute, and in what order.
+How ista-bridge relates to the broader BMW open-source diagnostic ecosystem — what we absorb, what we contribute, and in what order. The bridge workflow is **gather → build context → copy to LLM** — every integration feeds into that pipeline.
 
-> **Status:** In Progress — September 2026
+> **Status:** Active — September 2026. Bridge workflow, 8 satellites, and TUI are all shipped.
 >
 > **Scope:** F-series (F20/F22/F25/F30/F32 etc.) and newer chassis over ENET/DoIP.
 >
@@ -15,25 +15,36 @@ How ista-bridge relates to the broader BMW open-source diagnostic ecosystem — 
 ## At a glance
 
 ```
-                        ┌─────────────────────────┐
-                        │     ista-bridge (Go)     │
-                        │  session capture, parse, │
-                        │  bundle, DiagDocDb, TUI  │
-                        └────┬──────────┬──────────┘
-                 TAKE ◄──────┘          └──────► GIVE
-        ┌────────────────────┐     ┌─────────────────────┐
-        │ Live vehicle comms │     │ LLM-ready bundles    │
-        │ Protocol stacks    │     │ DiagDocDb decryption │
-        │ EDIABAS job defs   │     │ 7.9M VIN ranges      │
-        │ Scan/replay data   │     │ Fault enrichment     │
-        │ ENET transport     │     │ Report generation    │
-        └────────────────────┘     └─────────────────────┘
+                           ┌─────────────────────┐
+                           │  ista-bridge (Go)    │
+                           │  thin orchestrator   │
+                           │  TUI shell, Win32    │
+                           └────┬────────┬────────┘
+                                │        │
+               ┌────────────────┘        └────────────────┐
+               ▼                                          ▼
+  ┌──────────────────────┐              ┌──────────────────────────┐
+  │   SATELLITES (Nim)   │              │   SATELLITES (others)    │
+  │                      │              │                          │
+  │  ista-context ← brain│              │  ista-faultlookup (Gleam)│
+  │  ista-enet   ← car   │              │  ista-vinlookup   (Zig)  │
+  │  ista-import ← files │              │  ista-keyextract  (Odin) │
+  │  ista-report ← docs  │              │                          │
+  └──────────┬───────────┘              └──────────────────────────┘
+             │
+             ▼
+  ┌──────────────────────┐
+  │  LLM Context Output  │
+  │                      │
+  │  [c] clipboard       │
+  │  [w] context.txt     │
+  │  [p] stdout (pipe)   │
+  │                      │
+  │  ~800-1200 tokens    │
+  │  per session         │
+  └──────────────────────┘
 
-SATELLITES (Nim — never Go):
-  ista-context → Compact LLM context builder — the bridge brain
-  ista-enet    → HSFZ/ENET read-only client (from klartext/svietlik approaches)
-  ista-import  → Multi-format importer (BMWeb, Beemuu, svietlik, klartext)
-  ista-report  → All report rendering (Markdown, HTML, summary)
+BRIDGE WORKFLOW: [Enter] Gather All → toggle sections → [c/w/p] → paste into LLM
 
 SAFETY: write UDS services are hard-blocked at the protocol layer.
         The car is READ-ONLY. Always.
@@ -64,9 +75,8 @@ SAFETY: write UDS services are hard-blocked at the protocol layer.
 5. Makefile target: `make nim-enet`
 
 **Remaining:**
-- TUI: add a "Live" view that shows real-time fault/ECU state alongside the parsed session data
 - Merge klartext's SGBD-derived lookup tables with our `db export-lookup` JSON so fault searches hit both sources
-- Wire `ista-bridge live` Go commands to shell out to `ista-enet`
+- Wire `ista-bridge live` Go CLI commands to shell out to `ista-enet` (TUI already has a Live view)
 
 ### 2. headless-ista — MCP agent for live ISTA
 
@@ -301,19 +311,18 @@ svietlik currently hard-codes its supported module list (FEM_20, FLE02, REM_20) 
 
 Ordered by impact on the F22/F30 diagnostic workflow:
 
-| Priority | Integration | Why first | Unblocks |
-|---|---|---|---|
-| **P0** | klartext satellite | Direct vehicle communication without ISTA — the single biggest capability gap | `live` commands, real-time fault reading, Phase 4 LLM-driven diagnosis |
-| **P0** | DiagDocDb data publishing | Other projects need this data and we already have it — low effort, high value to ecosystem | Community adoption, cross-project data sharing |
-| **P1** | headless-ista companion | Automates the manual ISTA workflow — transforms ista-bridge from passive observer to active agent | `auto-session`, Phase 4 `ista-bridge ask` with live data |
-| **P1** | Bundle format specification | Formalizes our output so the ecosystem can standardize on one LLM interchange format | Cross-project LLM integration, `ista-report` as a shared tool |
-| **P2** | EDIABASLib job definitions | Enriches our data with EDIABAS job context — we parse the results but don't know the full job catalog | Better ECUKom parsing, richer bundles |
-| **P2** | BMWeb F30 data import | Fills F30-specific coverage gaps and adds a second data source for validation | Multi-source bundles, broader chassis coverage |
-| **P2** | BimmerDis/BimmerJson pipeline | Decodes the binary ECU definitions into structured data our bundles can include | Per-ECU parameter lists, richer LLM context |
-| **P2** | svietlik HSFZ cross-reference | Second HSFZ/UDS implementation to validate our protocol understanding; module scan import | Protocol confidence, module-level bundle data |
-| **P3** | Beemuu snapshot import | Brings in live-data recordings our bundles currently lack | Time-series data in bundles |
-| **P3** | rawenet for remote diagnostics | Enables diagnosing a car that's not on the local network | Remote/shop setups |
-| **P3** | pydiabas test fixtures | Synthetic EDIABAS data for CI testing | Test coverage without a car |
+| Priority | Integration | Status | Why | Unblocks |
+|---|---|---|---|---|
+| **P0** | klartext satellite | **DONE** — reimplemented in Nim as `ista-enet` | Direct vehicle communication without ISTA | TUI Live view, Phase 4 LLM-driven diagnosis |
+| **P0** | DiagDocDb data publishing | **DONE** — `db export-lookup` ships JSON datasets | Other projects need this data and we have it | Community adoption, cross-project data sharing |
+| **P0** | LLM bridge workflow | **DONE** — `ista-context` + bridge TUI | Gather → build context → copy to LLM in 2 keypresses | Phase 4 `ista-bridge ask` |
+| **P1** | headless-ista companion | Planned | Automates the manual ISTA workflow | `auto-session`, Phase 4 `ista-bridge ask` with live data |
+| **P1** | Bundle format specification | Planned | Formalizes output for ecosystem standardization | Cross-project LLM integration |
+| **P1** | BMWeb/Beemuu/svietlik import | **DONE** — `ista-import` Nim satellite | Multi-source bundles with data provenance | Broader chassis coverage |
+| **P2** | EDIABASLib job definitions | Planned | Enriches data with EDIABAS job context | Better ECUKom parsing, richer bundles |
+| **P2** | BimmerDis/BimmerJson pipeline | Planned | Decodes binary ECU definitions | Per-ECU parameter lists, richer LLM context |
+| **P3** | rawenet for remote diagnostics | Planned | Remote vehicle access | Remote/shop setups |
+| **P3** | pydiabas test fixtures | Planned | Synthetic EDIABAS data for CI | Test coverage without a car |
 
 ---
 
@@ -338,34 +347,48 @@ Summary of commands and views these integrations would add:
 ### CLI commands — satellite tools (Nim, not Go)
 
 ```
-# ista-enet (Nim) — read-only vehicle diagnostics
+# ista-context (Nim) — the bridge brain [BUILT]
+ista-context --data-dir ./session_.../ [--json]     # Compact LLM context (~800-1200 tok)
+ista-context --data-dir ./session_.../ --budget 1500 # Auto-trim to token budget
+ista-context --data-dir ./session_.../ --full-ecus   # Include all ECUs, not just faulted
+
+# ista-enet (Nim) — read-only vehicle diagnostics [BUILT]
 ista-enet faults [--ecu 0x00] [--json]   # Read DTCs (car required)
 ista-enet ecus [--json]                   # Scan for available ECUs
 ista-enet data --ecu 0x00 --did 0xF190   # Read a specific DID
 ista-enet vin [--json]                    # Read VIN from ECU
 
-# ista-import (Nim) — multi-format data importer
+# ista-import (Nim) — multi-format data importer [BUILT]
 ista-import --bmweb <scan.json> [--out dir]      # Import BMWeb scan
 ista-import --beemuu <snapshot.json> [--out dir]  # Import Beemuu snapshot
 ista-import --svietlik <scan.json> [--out dir]    # Import svietlik scan
 ista-import --klartext <dump.json> [--out dir]    # Import klartext dump
+ista-import --auto <file.json> [--out dir]        # Auto-detect format
 ista-import --bmweb a.json --beemuu b.json        # Merge multiple sources
 
-# Go orchestrator pass-through (planned)
-ista-bridge live faults              # Shells out to ista-enet
-ista-bridge live ecus                # Shells out to ista-enet
-ista-bridge import --bmweb <file>    # Shells out to ista-import
-ista-bridge auto-session             # headless-ista drives ISTA, we capture
-ista-bridge export --diagdocdb       # Publish DiagDocDb lookup data
-ista-bridge export --bundle-schema   # Export bundle JSON schemas
+# Go orchestrator pass-through
+ista-bridge live faults              # Shells out to ista-enet [TUI BUILT, CLI planned]
+ista-bridge live ecus                # Shells out to ista-enet [TUI BUILT, CLI planned]
+ista-bridge import --bmweb <file>    # Shells out to ista-import [TUI BUILT, CLI planned]
+ista-bridge auto-session             # headless-ista drives ISTA, we capture [planned]
+ista-bridge ask "what's wrong?"      # Bundle + send to Claude/ChatGPT API [planned]
+ista-bridge export --bundle-schema   # Export bundle JSON schemas [planned]
 ```
 
 ### TUI views
 
 ```
-Live        — real-time fault/ECU/data display via klartext
-Import      — drag-and-drop or path input for BMWeb/Beemuu/svietlik files
-Multi-Source — side-by-side comparison when a session has data from multiple tools
+BUILT:
+  Bridge      — [Enter] Gather All → build context → copy/save/pipe to LLM
+  Context     — per-section token estimates, toggleable sections, live preview
+  Gather      — progress bars for each data source, ista-context (Nim) status
+  Sessions    — interactive table with cursor navigation, bundle from selection
+  Live        — real-time fault/ECU/VIN via ista-enet (read-only safety banner)
+  Import      — path input for BMWeb/Beemuu/svietlik files, auto-format detection
+  Tools       — secondary features menu (ENET, import)
+
+PLANNED:
+  Multi-Source — side-by-side comparison when a session has data from multiple tools
 ```
 
 ---
