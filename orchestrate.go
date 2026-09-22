@@ -13,13 +13,13 @@ var satelliteTools = map[string]struct {
 	subdir string
 	binary string
 }{
-	"keyextract":  {subdir: "polyglot/odin/db_bridge", binary: "ista-keyextract"},
-	"vinlookup":   {subdir: "polyglot/zig/data_processor/zig-out/bin", binary: "ista-vinlookup"},
-	"faultlookup": {subdir: "polyglot/gleam/fault_lookup/build/erlang-shipment", binary: "entrypoint"},
-	"report":      {subdir: "polyglot/nim/report_gen", binary: "ista-report"},
-	"enet":        {subdir: "polyglot/nim/enet_client", binary: "ista-enet"},
-	"import":      {subdir: "polyglot/nim/data_import", binary: "ista-import"},
-	"context":     {subdir: "polyglot/nim/context_builder", binary: "ista-context"},
+	"keyextract":  {subdir: "tools/odin/db_bridge", binary: "ista-keyextract"},
+	"vinlookup":   {subdir: "tools/zig/data_processor/zig-out/bin", binary: "ista-vinlookup"},
+	"faultlookup": {subdir: "tools/gleam/fault_lookup/build/erlang-shipment", binary: "entrypoint"},
+	"report":      {subdir: "tools/nim/report_gen", binary: "ista-report"},
+	"enet":        {subdir: "tools/nim/enet_client", binary: "ista-enet"},
+	"import":      {subdir: "tools/nim/data_import", binary: "ista-import"},
+	"context":     {subdir: "tools/nim/context_builder", binary: "ista-context"},
 }
 
 func findTool(name string) (string, bool) {

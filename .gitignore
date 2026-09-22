@@ -6,12 +6,15 @@ ista_keys.txt
 ista_keys*
 *.keys
 
-# Polyglot build artifacts
-polyglot/gleam/fault_lookup/build/
-polyglot/zig/data_processor/zig-out/
-polyglot/zig/data_processor/zig-cache/
-polyglot/zig/data_processor/.zig-cache/
-polyglot/nim/report_gen/nimcache/
+# Satellite tool build artifacts
+tools/gleam/fault_lookup/build/
+tools/zig/data_processor/zig-out/
+tools/zig/data_processor/zig-cache/
+tools/zig/data_processor/.zig-cache/
+tools/nim/report_gen/nimcache/
+tools/nim/enet_client/nimcache/
+tools/nim/data_import/nimcache/
+tools/nim/context_builder/nimcache/
 
 # Exported DB data (large JSON files)
 db-export/

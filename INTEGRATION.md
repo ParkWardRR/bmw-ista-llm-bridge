@@ -6,7 +6,7 @@ How ista-bridge relates to the broader BMW open-source diagnostic ecosystem — 
 >
 > **Scope:** F-series (F20/F22/F25/F30/F32 etc.) and newer chassis over ENET/DoIP.
 >
-> **Language policy:** New code is written in **Nim** (preferred), Gleam, Zig, or Odin — **never Go**. Go is the thin orchestrator/TUI shell only. All logic, rendering, protocol work, and data processing goes into polyglot satellites.
+> **Language policy:** New code is written in **Nim** (preferred), Gleam, Zig, or Odin — **never Go**. Go is the thin orchestrator/TUI shell only. All logic, rendering, protocol work, and data processing goes into satellites.
 >
 > **Safety policy:** All vehicle communication is **strictly read-only**. Write UDS services (0x2E, 0x2F, 0x31, 0x34–0x37, 0x3D, 0x14) are hard-blocked at the protocol layer and never reach the wire. No flashing, no coding, no DTC clearing, no actuator control.
 
@@ -65,7 +65,7 @@ SAFETY: write UDS services are hard-blocked at the protocol layer.
 | ISTA-derived semantic lookup | klartext already maps raw UDS responses to human-readable ISTA names | Feed klartext's lookup tables into our Gleam fault-lookup satellite or merge into our DiagDocDb exports |
 | Native MCP surface | klartext already speaks MCP — an LLM agent can drive diagnostics | Bridge klartext's MCP tools into our planned Phase 4 LLM integration so `ista-bridge ask` can do live reads |
 
-**Status: ista-enet satellite BUILT** (`polyglot/nim/enet_client/enet_client.nim`)
+**Status: ista-enet satellite BUILT** (`tools/nim/enet_client/enet_client.nim`)
 
 **What was done:**
 1. ~~Add klartext as a git submodule~~ → Rewrote HSFZ/UDS protocol in Nim (`ista-enet`), no Rust dependency
@@ -120,7 +120,7 @@ SAFETY: write UDS services are hard-blocked at the protocol layer.
 | JSON scan export format | BMWeb exports scans as JSON — if users run both tools, we can import BMWeb scans into our bundles | Add an `import bmweb <file>` command that merges a BMWeb JSON export into an ista-bridge session bundle |
 | Workshop data / diagnostic procedures | BMWeb includes procedure-level diagnostic guidance | Extract and include in our LLM bundles as additional context for the AI |
 
-**Status: importer BUILT** (`polyglot/nim/data_import/data_import.nim`)
+**Status: importer BUILT** (`tools/nim/data_import/data_import.nim`)
 
 **What was done:**
 1. ~~Write an importer in Go~~ → Written in **Nim** as `ista-import` satellite

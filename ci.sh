@@ -70,8 +70,8 @@ fi
 # --- 5. Satellite tool checks ---
 step "Satellite tools"
 
-if [ -f polyglot/nim/report_gen/ista-report.exe ]; then
-    if polyglot/nim/report_gen/ista-report.exe --help > /dev/null 2>&1; then
+if [ -f tools/nim/report_gen/ista-report.exe ]; then
+    if tools/nim/report_gen/ista-report.exe --help > /dev/null 2>&1; then
         pass "nim satellite"
     else
         fail "nim satellite"
@@ -80,8 +80,8 @@ else
     echo -e "${YELLOW}SKIP${RESET}: nim satellite (not built)"
 fi
 
-if [ -d polyglot/gleam/fault_lookup/build ]; then
-    if (cd polyglot/gleam/fault_lookup && gleam test > /dev/null 2>&1); then
+if [ -d tools/gleam/fault_lookup/build ]; then
+    if (cd tools/gleam/fault_lookup && gleam test > /dev/null 2>&1); then
         pass "gleam satellite"
     else
         fail "gleam satellite"

@@ -1,0 +1,6 @@
+[
+  {"code":"1","sae_code":"P0300","title":"Misfire detected","ecu_variant":"dme90","ecu_group":"d_0012","weighting":100,"safety_relevant":true},
+  {"code":"2","sae_code":"P0171","title":"System too lean (Bank 1)","ecu_variant":"dme90","ecu_group":"d_0012","weighting":60,"safety_relevant":false},
+  {"code":"3","sae_code":"C1201","title":"ABS sensor implausible signal","ecu_variant":"dsc10","ecu_group":"d_0030","weighting":90,"safety_relevant":true},
+  {"code":"4","sae_code":"B1004","title":"Interior light circuit malfunction","ecu_variant":"fzd1","ecu_group":"d_0060","weighting":10,"safety_relevant":false}
+]

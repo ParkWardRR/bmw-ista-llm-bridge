@@ -47,7 +47,7 @@
 </p>
 
 <p align="center">
-  <strong>Polyglot Architecture</strong><br>
+  <strong>Satellite Architecture</strong><br>
   <img src="https://img.shields.io/badge/Go-Orchestrator-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go">
   <img src="https://img.shields.io/badge/Nim-Context%20%7C%20Reports%20%7C%20ENET%20%7C%20Import-FFE953?style=flat-square&logoColor=black" alt="Nim">
   <img src="https://img.shields.io/badge/Gleam-Fault%20Lookup-FFAFF3?style=flat-square" alt="Gleam">
@@ -131,8 +131,8 @@ Without the satellite tools, all features still work via the PowerShell database
 ### Install
 
 ```bash
-git clone https://github.com/ParkWardRR/bmw-ista-llm-bridge.git
-cd bmw-ista-llm-bridge
+git clone https://github.com/ista-tools/ista-bridge.git
+cd ista-bridge
 go build -o ista-bridge.exe .
 ```
 
@@ -564,8 +564,8 @@ Each component uses the language best suited to its task. Go orchestrates the sy
 
 Go discovers satellite tool binaries at runtime via the orchestrator (`orchestrate.go`). For each tool, it searches:
 1. The directory containing the `ista-bridge` binary
-2. The tool's `polyglot/` subdirectory relative to the binary
-3. The current working directory and its `polyglot/` subdirectory
+2. The tool's `tools/` subdirectory relative to the binary
+3. The current working directory and its `tools/` subdirectory
 4. The system `PATH`
 
 If a satellite binary is found:
@@ -581,7 +581,7 @@ If a satellite tool isn't built, Go falls back to its PowerShell database bridge
 
 > **Language policy:** All new code is written in Nim (preferred), Gleam, Zig, or Odin — never Go. Go is the thin orchestrator shell only.
 
-Source code is in the `polyglot/` directory.
+Source code is in the `tools/` directory.
 
 ---
 
@@ -728,8 +728,8 @@ log_dir = 'C:\EC-APPS\ISTA\Logs'  # ISTA log directory
 
 ```bash
 # Clone
-git clone https://github.com/ParkWardRR/bmw-ista-llm-bridge.git
-cd bmw-ista-llm-bridge
+git clone https://github.com/ista-tools/ista-bridge.git
+cd ista-bridge
 
 # Build Go binary only
 go build -o ista-bridge.exe .
@@ -770,7 +770,7 @@ No CGo. No C compiler needed. Pure Go + FFmpeg.
 ## Project Structure
 
 ```
-bmw-ista-llm-bridge/
+ista-bridge/
 ├── main.go          # Entry point, subcommand routing, capture loop (Windows)
 ├── main_other.go    # Non-Windows entry — launches bridge TUI directly
 ├── tui.go           # Bubble Tea TUI — Windows (full ISTA integration)
@@ -793,7 +793,7 @@ bmw-ista-llm-bridge/
 ├── logging.go       # Structured logging (slog) with rotation (lumberjack)
 ├── Makefile         # Build targets for Go, Nim, Gleam, Zig
 ├── INTEGRATION.md   # Ecosystem integration plan (klartext, BMWeb, Beemuu, svietlik, etc.)
-├── polyglot/
+├── tools/
 │   ├── odin/        # PE/CLI key extractor (Odin) — ista-keyextract
 │   ├── gleam/       # Fault code lookup (Gleam/Erlang) — ista-faultlookup
 │   ├── zig/         # VIN decoder with binary search (Zig) — ista-vinlookup
@@ -818,7 +818,7 @@ See [ROADMAP.md](ROADMAP.md) for the full phased plan.
 | 3. Session Bundling | **Done** | JSON + Nim-generated Markdown/HTML output for LLM consumption |
 | 3.5. DiagDocDb Access | **Done** | Decrypt + query the 7 GB database (232 tables, 7.9M VIN ranges) |
 | 3.6. Interactive TUI | **Done** | Bridge-oriented TUI: gather → build context → copy to LLM. Section toggles, token estimates |
-| 3.7. Polyglot Satellites | **Done** | 8 satellite tools: Nim (context, report, ENET, import), Gleam (fault lookup), Zig (VIN search), Odin (key extract) |
+| 3.7. Satellite Tools | **Done** | 8 satellite tools: Nim (context, report, ENET, import), Gleam (fault lookup), Zig (VIN search), Odin (key extract) |
 | 3.8. Satellite Orchestration | **Done** | Runtime tool discovery, graceful fallback, offline lookup data export |
 | 4. LLM Integration | Planned | `ista-bridge ask` — direct Claude/ChatGPT API integration |
 | 5. Distribution | Planned | GoReleaser, GitHub releases, Winget/Scoop |

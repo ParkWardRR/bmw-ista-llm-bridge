@@ -1,4 +1,4 @@
-module github.com/ParkWardRR/bmw-ista-llm-bridge
+module github.com/ista-tools/ista-bridge
 
 go 1.27.0
 

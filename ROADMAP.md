@@ -189,7 +189,7 @@ Full-featured terminal UI (Bubble Tea) for interactive diagnostic workflows with
 - [x] No Windows dependencies — pure Bubble Tea rendering
 - [x] No `--demo` flag needed — TUI launches directly on non-Windows
 
-## Phase 3.7: Polyglot Satellite Tools [DONE]
+## Phase 3.7: Satellite Tools [DONE]
 
 Purpose-built tools in languages optimized for each task, orchestrated by Go at runtime.
 
@@ -262,10 +262,10 @@ Purpose-built tools in languages optimized for each task, orchestrated by Go at 
 
 ## Phase 3.8: Satellite Orchestration [DONE]
 
-Runtime discovery and management of polyglot satellite tools.
+Runtime discovery and management of satellite tools.
 
 - [x] `orchestrate.go` — tool registry with binary name and subdirectory mapping
-- [x] Multi-path binary search: executable dir, polyglot subdir, cwd, PATH
+- [x] Multi-path binary search: executable dir, satellite subdir, cwd, PATH
 - [x] `runTool()` / `runToolJSON()` — execute satellite and parse JSON output
 - [x] `db export-lookup` — export DiagDocDb data to JSON for offline satellite consumption
 - [x] Graceful fallback: if satellite not found, Go falls back to PowerShell bridge
