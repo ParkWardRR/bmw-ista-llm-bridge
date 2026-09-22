@@ -107,7 +107,7 @@ Then you paste `summary.md` into Claude or ChatGPT and ask *"what's wrong with m
 
 | Requirement | Why |
 |---|---|
-| **Windows 10/11** | ISTA is Windows-only; ista-bridge uses Win32 APIs |
+| **Windows 10/11** | ISTA is Windows-only; ista-bridge uses Win32 APIs (macOS/Linux: `--demo` mode available) |
 | **Go 1.27+** | Build the main binary |
 | **FFmpeg** | AVIF screenshot encoding ([download](https://ffmpeg.org/download.html), add to PATH) |
 | **BMW ISTA** | The diagnostic software itself (installed at `C:\EC-APPS\ISTA\`) |
@@ -157,6 +157,9 @@ make clean
 # Launch the interactive TUI (recommended)
 ista-bridge.exe
 
+# Preview TUI on macOS/Linux (mock data, no Windows required)
+ista-bridge --demo
+
 # Or use individual commands directly:
 
 # 1. Start ISTA and connect to your car
@@ -190,7 +193,11 @@ Running with no arguments launches the interactive terminal UI:
 ista-bridge.exe
 ```
 
-The TUI provides a dashboard with system status, capture stats, and keyboard-driven access to all features:
+The TUI provides a dashboard with system status, capture stats, and keyboard-driven access to all features.
+
+On **macOS/Linux**, run `ista-bridge --demo` for a preview with mock data — all views are functional, just with simulated vehicle/session data instead of live ISTA.
+
+Keys:
 
 | Key | Action |
 |---|---|
@@ -692,8 +699,10 @@ No CGo. No C compiler needed. Pure Go + FFmpeg.
 
 ```
 bmw-ista-llm-bridge/
-├── main.go          # Entry point, subcommand routing, capture loop, SIMD pixel diff
+├── main.go          # Entry point, subcommand routing, capture loop, SIMD pixel diff (Windows)
+├── main_other.go    # Non-Windows entry point — routes to demo TUI
 ├── tui.go           # Bubble Tea TUI (dashboard, watch, sessions, VIN, lookup, report, live, import)
+├── tui_demo.go      # Cross-platform demo TUI with mock data (macOS/Linux)
 ├── orchestrate.go   # Satellite tool discovery, execution, and data export for offline lookups
 ├── session.go       # ISTA session discovery, XML parsing (META/TRANS/PRG), and file correlation
 ├── bundle.go        # LLM-friendly session bundling (JSON + Nim-generated summary.md)

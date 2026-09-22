@@ -172,6 +172,12 @@ Full-featured terminal UI (Bubble Tea) for interactive diagnostic workflows with
 - [x] Graceful degradation — DB features hidden when DiagDocDb is not accessible
 - [x] Alt-screen mode for clean terminal restore on exit
 
+### Cross-platform Demo
+- [x] `--demo` flag for macOS/Linux — full TUI with mock vehicle/session data
+- [x] All views functional (dashboard, sessions, VIN, fault, live, import)
+- [x] Mock ENET responses (6 ECUs, 4 faults, VIN) and import results
+- [x] No Windows dependencies — pure Bubble Tea rendering
+
 ## Phase 3.7: Polyglot Satellite Tools [DONE]
 
 Purpose-built tools in languages optimized for each task, orchestrated by Go at runtime.
