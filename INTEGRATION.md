@@ -6,7 +6,7 @@ How ista-bridge relates to the broader BMW open-source diagnostic ecosystem — 
 >
 > **Scope:** F-series (F20/F22/F25/F30/F32 etc.) and newer chassis over ENET/DoIP.
 >
-> **Language policy:** New integration code is written in **Nim** (preferred), Odin, Gleam, or Zig — not Go. Go remains the orchestrator/TUI shell but is not growing.
+> **Language policy:** New code is written in **Nim** (preferred), Gleam, Zig, or Odin — **never Go**. Go is the thin orchestrator/TUI shell only. All logic, rendering, protocol work, and data processing goes into polyglot satellites.
 >
 > **Safety policy:** All vehicle communication is **strictly read-only**. Write UDS services (0x2E, 0x2F, 0x31, 0x34–0x37, 0x3D, 0x14) are hard-blocked at the protocol layer and never reach the wire. No flashing, no coding, no DTC clearing, no actuator control.
 
@@ -29,9 +29,11 @@ How ista-bridge relates to the broader BMW open-source diagnostic ecosystem — 
         │ ENET transport     │     │ Report generation    │
         └────────────────────┘     └─────────────────────┘
 
-NEW SATELLITES (Nim — not Go):
-  ista-enet   → HSFZ/ENET read-only client (from klartext/svietlik approaches)
-  ista-import → Multi-format importer (BMWeb, Beemuu, svietlik, klartext)
+SATELLITES (Nim — never Go):
+  ista-context → Compact LLM context builder — the bridge brain
+  ista-enet    → HSFZ/ENET read-only client (from klartext/svietlik approaches)
+  ista-import  → Multi-format importer (BMWeb, Beemuu, svietlik, klartext)
+  ista-report  → All report rendering (Markdown, HTML, summary)
 
 SAFETY: write UDS services are hard-blocked at the protocol layer.
         The car is READ-ONLY. Always.

@@ -172,15 +172,37 @@ Full-featured terminal UI (Bubble Tea) for interactive diagnostic workflows with
 - [x] Graceful degradation — DB features hidden when DiagDocDb is not accessible
 - [x] Alt-screen mode for clean terminal restore on exit
 
-### Cross-platform Demo
-- [x] `--demo` flag for macOS/Linux — full TUI with mock vehicle/session data
-- [x] All views functional (dashboard, sessions, VIN, fault, live, import)
-- [x] Mock ENET responses (6 ECUs, 4 faults, VIN) and import results
+### Bridge Workflow (LLM-first)
+- [x] TUI reoriented around gather → build context → copy to LLM
+- [x] Primary action: [Enter] Gather All — collects every data source automatically
+- [x] Context view with per-section token estimates and toggleable sections
+- [x] Section mutual exclusivity (ECU faults-only vs full list)
+- [x] Live preview with syntax-highlighted output (ACTIVE/STORED/FAIL/PASS)
+- [x] [c] Copy to clipboard, [w] Save to file
+- [x] Tools menu for secondary features (ENET, import)
+
+### Cross-platform
+- [x] macOS/Linux — full bridge TUI with mock vehicle/session data
 - [x] No Windows dependencies — pure Bubble Tea rendering
+- [x] No `--demo` flag needed — TUI launches directly on non-Windows
 
 ## Phase 3.7: Polyglot Satellite Tools [DONE]
 
 Purpose-built tools in languages optimized for each task, orchestrated by Go at runtime.
+
+> **Language policy:** All new code is written in **Nim** (preferred), Gleam, Zig, or Odin — never Go.
+
+### ista-context (Nim) — Compact LLM Context Builder
+- [x] Reads session bundle JSONs (vehicle, faults, ecus, tests, timeline)
+- [x] Renders compact, token-efficient diagnostic context (~800-1200 tokens per session)
+- [x] Per-section token estimation (~4 chars/token heuristic)
+- [x] Budget targeting with `--budget` flag (auto-trims to fit)
+- [x] Full vs faults-only ECU list toggle
+- [x] Timeline filtering — errors, warnings, and lifecycle events prioritized
+- [x] Smart test rendering — failures first, passed summary with `[+N more]`
+- [x] JSON output mode (`--json`) with section breakdown for TUI integration
+- [x] Plain text output to stdout — pipe to clipboard or file
+- [x] CLI: `--data-dir`, `--json`, `--full-ecus`, `--budget`
 
 ### ista-report (Nim)
 - [x] All report rendering moved from Go to Nim
@@ -241,8 +263,9 @@ Runtime discovery and management of polyglot satellite tools.
 - [x] `db export-lookup` — export DiagDocDb data to JSON for offline satellite consumption
 - [x] Graceful fallback: if satellite not found, Go falls back to PowerShell bridge
 - [x] Makefile for building Go + satellite tools (`make build`, `make nim`, `make gleam`, `make zig`)
-- [x] `enet` and `import` satellite entries added to tool registry
-- [x] `make nim-enet`, `make nim-import` build targets
+- [x] `enet`, `import`, and `context` satellite entries added to tool registry
+- [x] `make nim-enet`, `make nim-import`, `make nim-context` build targets
+- [x] 8 total satellites: Nim (context, report, ENET, import), Gleam (faults), Zig (VIN), Odin (keys)
 
 ## Phase 4: LLM Integration
 

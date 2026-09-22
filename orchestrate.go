@@ -19,6 +19,7 @@ var satelliteTools = map[string]struct {
 	"report":      {subdir: "polyglot/nim/report_gen", binary: "ista-report"},
 	"enet":        {subdir: "polyglot/nim/enet_client", binary: "ista-enet"},
 	"import":      {subdir: "polyglot/nim/data_import", binary: "ista-import"},
+	"context":     {subdir: "polyglot/nim/context_builder", binary: "ista-context"},
 }
 
 func findTool(name string) (string, bool) {
