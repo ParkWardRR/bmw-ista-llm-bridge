@@ -7,7 +7,7 @@
 ## Language: Nim (preferred over Go per project policy)
 ## Safety: read-only — no vehicle communication, only reads JSON files
 
-import std/[json, os, strformat, strutils, times, algorithm, sequtils, parseopt, tables]
+import std/[json, os, strformat, strutils, algorithm, sequtils, parseopt]
 
 const Version = "0.1.0"
 

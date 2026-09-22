@@ -515,12 +515,12 @@ proc scanEcus*(conn: EnetConnection, addresses: openArray[uint16] = []): seq[Ecu
   let addrs = if addresses.len > 0: @addresses
               else: (block:
                 var a: seq[uint16]
-                for (addr, _) in KnownEcus:
-                  a.add addr
+                for (ecuAddr, _) in KnownEcus:
+                  a.add ecuAddr
                 a)
-  for addr in addrs:
+  for ecuAddr in addrs:
     try:
-      let info = conn.readEcuInfo(addr)
+      let info = conn.readEcuInfo(ecuAddr)
       if info.vin.len > 0 or info.hwVersion.len > 0:
         result.add info
     except CatchableError:
@@ -642,7 +642,7 @@ proc parseCli(): CliOptions =
           result.command = cmdHelp
     of cmdLongOption, cmdShortOption:
       case p.key.toLowerAscii
-      of "host", "h" & "ost": result.host = p.val  # avoid short-option collision
+      of "host": result.host = p.val
       of "port": result.port = parseInt(p.val)
       of "ecu": result.ecuAddr = parseHex(p.val)
       of "did": result.did = parseHex(p.val)
@@ -686,8 +686,8 @@ proc runEcus(opts: CliOptions) =
       echo &"Found {ecus.len} ECUs:"
       for e in ecus:
         var label = &"0x{e.address:02X}"
-        for (addr, name) in KnownEcus:
-          if addr == e.address:
+        for (ecuAddr, name) in KnownEcus:
+          if ecuAddr == e.address:
             label = &"{name} (0x{e.address:02X})"
             break
         echo &"  {label}"

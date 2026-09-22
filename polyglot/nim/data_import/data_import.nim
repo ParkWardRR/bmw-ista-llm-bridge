@@ -1,4 +1,4 @@
-import std/[json, os, strutils, strformat, parseopt, times, tables, algorithm, sequtils]
+import std/[json, os, strutils, strformat, parseopt, times, tables, algorithm]
 
 # ista-import: Multi-format data importer for ista-bridge.
 #

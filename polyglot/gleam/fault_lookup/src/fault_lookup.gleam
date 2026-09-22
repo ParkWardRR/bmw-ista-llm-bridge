@@ -1,5 +1,5 @@
 import argv
-import gleam/dynamic/decode
+import gleam/dynamic
 import gleam/int
 import gleam/io
 import gleam/json
@@ -175,14 +175,14 @@ fn resolve_data_dir() -> Result(String, Nil) {
 fn load_fault_codes(dir: String) -> Result(List(FaultCode), String) {
   let path = dir <> "/faultcodes.json"
   use content <- result.try(read_file(path))
-  json.parse(from: content, using: decode.list(of: fault_code_decoder()))
+  json.decode(from: content, using: dynamic.list(fault_code_decoder()))
   |> result.map_error(fn(_) { "could not parse " <> path <> " as JSON" })
 }
 
 fn load_pcodes(dir: String) -> Result(List(PCode), String) {
   let path = dir <> "/pcodes.json"
   use content <- result.try(read_file(path))
-  json.parse(from: content, using: decode.list(of: pcode_decoder()))
+  json.decode(from: content, using: dynamic.list(pcode_decoder()))
   |> result.map_error(fn(_) { "could not parse " <> path <> " as JSON" })
 }
 
@@ -193,31 +193,27 @@ fn read_file(path: String) -> Result(String, String) {
   })
 }
 
-fn fault_code_decoder() -> decode.Decoder(FaultCode) {
-  use code <- decode.field("code", decode.string)
-  use sae_code <- decode.field("sae_code", decode.string)
-  use title <- decode.field("title", decode.string)
-  use ecu_variant <- decode.field("ecu_variant", decode.string)
-  use ecu_group <- decode.field("ecu_group", decode.string)
-  use weighting <- decode.field("weighting", decode.int)
-  use safety_relevant <- decode.field("safety_relevant", decode.bool)
-  decode.success(FaultCode(
-    code: code,
-    sae_code: sae_code,
-    title: title,
-    ecu_variant: ecu_variant,
-    ecu_group: ecu_group,
-    weighting: weighting,
-    safety_relevant: safety_relevant,
-  ))
+fn fault_code_decoder() -> dynamic.Decoder(FaultCode) {
+  dynamic.decode7(
+    FaultCode,
+    dynamic.field("code", dynamic.string),
+    dynamic.field("sae_code", dynamic.string),
+    dynamic.field("title", dynamic.string),
+    dynamic.field("ecu_variant", dynamic.string),
+    dynamic.field("ecu_group", dynamic.string),
+    dynamic.field("weighting", dynamic.int),
+    dynamic.field("safety_relevant", dynamic.bool),
+  )
 }
 
-fn pcode_decoder() -> decode.Decoder(PCode) {
-  use pcode <- decode.field("pcode", decode.string)
-  use fcode <- decode.field("fcode", decode.int)
-  use device <- decode.field("device", decode.string)
-  use title <- decode.field("title", decode.string)
-  decode.success(PCode(pcode: pcode, fcode: fcode, device: device, title: title))
+fn pcode_decoder() -> dynamic.Decoder(PCode) {
+  dynamic.decode4(
+    PCode,
+    dynamic.field("pcode", dynamic.string),
+    dynamic.field("fcode", dynamic.int),
+    dynamic.field("device", dynamic.string),
+    dynamic.field("title", dynamic.string),
+  )
 }
 
 fn matches_fault_code(fault_code: FaultCode, query: String) -> Bool {

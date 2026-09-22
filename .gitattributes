@@ -1,0 +1,12 @@
+# Enforce LF line endings for all source code (gofmt, nim, gleam, zig require LF)
+*.go text eol=lf
+*.nim text eol=lf
+*.gleam text eol=lf
+*.zig text eol=lf
+*.odin text eol=lf
+*.toml text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+Makefile text eol=lf

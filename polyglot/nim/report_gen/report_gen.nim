@@ -231,11 +231,6 @@ proc esc(s: string): string =
   result = result.replace(">", "&gt;")
   result = result.replace("\"", "&quot;")
 
-proc formatBytes(b: int64): string =
-  if b >= 1048576: &"{float(b) / 1048576.0:.1f} MB"
-  elif b >= 1024: &"{float(b) / 1024.0:.1f} KB"
-  else: &"{b} B"
-
 proc sortFaultsSafetyFirst(faults: seq[Fault]): seq[Fault] =
   result = faults
   proc cmp(a, b: Fault): int =
