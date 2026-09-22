@@ -1033,7 +1033,9 @@ func (m tuiModel) viewLiveEnet() string {
 	b.WriteString(styleTitle.Render("Live Diagnostics") +
 		styleSubtitle.Render("  ista-enet (Nim, read-only)") + "\n\n")
 
-	b.WriteString(styleFail.Render("SAFETY: Write operations blocked at protocol layer") + "\n\n")
+	b.WriteString(styleFail.Render("SAFETY: Read-only. Writes blocked at protocol layer.") + "\n")
+	b.WriteString(styleFail.Render("        Will NOT connect if ISTA is running.") + "\n")
+	b.WriteString(styleFail.Render("        Cannot interfere with any running session.") + "\n\n")
 
 	for i, mode := range liveModes {
 		if i == m.liveMode {

@@ -1,11 +1,17 @@
-import std/[net, json, os, strutils, strformat, parseopt, times, endians]
+import std/[net, json, os, strutils, strformat, parseopt, times, endians, osproc]
 
 # ista-enet: Read-only BMW ENET/HSFZ diagnostic client.
 #
-# Speaks the HSFZ (High Speed Function Zugriff) framing protocol over TCP
-# to an F-series BMW at 169.254.x.x:6801, then executes UDS diagnostic
-# reads. Write services are hard-blocked at the protocol layer — they
-# never reach the wire.
+# SAFETY INVARIANTS — every one is load-bearing:
+#   1. NEVER write to car systems. Write UDS services are hard-blocked at
+#      the protocol layer — they raise SafetyError before serialization.
+#   2. NEVER interfere with a running ISTA session. Before connecting, we
+#      check for ISTA processes (ISTAGUI.exe, IstaServicesHost.exe). If
+#      found, we refuse to connect — ISTA owns the diagnostic session.
+#   3. ALWAYS clean up. On disconnect, we return every ECU we touched back
+#      to the default diagnostic session (0x10 0x01).
+#   4. Use tester address 0xF5 by default (ISTA uses 0xF4) so even if both
+#      run simultaneously, UDS response routing stays separate.
 #
 # Based on the protocol approaches from klartext (Rust) and svietlik
 # (TypeScript), rewritten in Nim for the ista-bridge satellite toolchain.
@@ -13,9 +19,52 @@ import std/[net, json, os, strutils, strformat, parseopt, times, endians]
 const
   DefaultPort = 6801
   DefaultHost = "169.254.0.10"
+  DefaultTesterAddr = 0xF5'u16  # 0xF5 — deliberately different from ISTA's 0xF4
   HsfzHeaderLen = 6
   ConnectTimeoutMs = 5000
   ReadTimeoutMs = 3000
+
+# ---------------------------------------------------------------------------
+# ISTA session detection — refuse to connect if ISTA is running
+# ---------------------------------------------------------------------------
+# ISTA owns the diagnostic session. If ISTAGUI.exe or IstaServicesHost.exe
+# is running, we must not connect — our HSFZ handshake, extended session
+# requests, and tester-present keepalives could corrupt ISTA's active
+# diagnostic communication with the vehicle.
+
+proc isIstaRunning*(): bool =
+  when defined(windows):
+    try:
+      let output = execProcess("tasklist", args = ["/FI", "IMAGENAME eq ISTAGUI.exe", "/NH"], options = {poUsePath})
+      if "ISTAGUI.exe" in output:
+        return true
+      let output2 = execProcess("tasklist", args = ["/FI", "IMAGENAME eq IstaServicesHost.exe", "/NH"], options = {poUsePath})
+      if "IstaServicesHost.exe" in output2:
+        return true
+    except CatchableError:
+      discard
+  else:
+    try:
+      let output = execProcess("pgrep", args = ["-f", "ISTAGUI|IstaServicesHost"], options = {poUsePath})
+      if output.strip.len > 0:
+        return true
+    except CatchableError:
+      discard
+  return false
+
+type IstaRunningError* = object of CatchableError
+
+proc enforceNoIstaConflict*(force: bool = false) =
+  if isIstaRunning():
+    if force:
+      stderr.writeLine "WARNING: ISTA is running! Using --force to override."
+      stderr.writeLine "         This may interfere with ISTA's active diagnostic session."
+      stderr.writeLine "         Close ISTA first if possible."
+    else:
+      raise newException(IstaRunningError,
+        "ISTA is running (ISTAGUI.exe or IstaServicesHost.exe detected). " &
+        "Connecting now could interfere with ISTA's active diagnostic session. " &
+        "Close ISTA first, or use --force to override (not recommended).")
 
 # ---------------------------------------------------------------------------
 # HSFZ frame types
@@ -250,23 +299,29 @@ type
     port: int
     testerAddr: uint16
     connected: bool
+    touchedEcus: seq[uint16]  # ECUs we switched to extended session — must clean up
 
 proc newEnetConnection*(host: string = DefaultHost, port: int = DefaultPort,
-                        testerAddr: uint16 = 0xF4): EnetConnection =
+                        testerAddr: uint16 = DefaultTesterAddr): EnetConnection =
   EnetConnection(
     sock: newSocket(),
     host: host,
     port: port,
     testerAddr: testerAddr,
-    connected: false
+    connected: false,
+    touchedEcus: @[],
   )
 
-proc connect*(conn: EnetConnection) =
+proc connect*(conn: EnetConnection, force: bool = false) =
+  enforceNoIstaConflict(force)
   conn.sock.connect(conn.host, Port(conn.port), ConnectTimeoutMs)
   conn.connected = true
 
+proc cleanupSessions(conn: EnetConnection)
+
 proc disconnect*(conn: EnetConnection) =
   if conn.connected:
+    conn.cleanupSessions()
     conn.sock.close()
     conn.connected = false
 
@@ -303,9 +358,12 @@ proc doHandshake*(conn: EnetConnection) =
 proc sendUds*(conn: EnetConnection, dstAddr: uint16, serviceId: uint8,
               subData: openArray[byte] = []): UdsResponse =
   enforceReadOnly(serviceId)
+  # Track ECUs we switch to extended session so we can clean up on disconnect
+  if serviceId == 0x10 and subData.len > 0 and subData[0] == 0x03:
+    if dstAddr notin conn.touchedEcus:
+      conn.touchedEcus.add dstAddr
   let frame = buildUdsRequest(conn.testerAddr, dstAddr, serviceId, subData)
   conn.sendFrame(frame)
-  # Read response frames, skipping alive checks
   while true:
     let resp = conn.recvFrame()
     case resp.typ
@@ -317,7 +375,16 @@ proc sendUds*(conn: EnetConnection, dstAddr: uint16, serviceId: uint8,
     of htErrorAck.uint16:
       raise newException(IOError, "HSFZ error acknowledgment received")
     else:
-      discard  # skip unknown frame types
+      discard
+
+proc cleanupSessions(conn: EnetConnection) =
+  for ecuAddr in conn.touchedEcus:
+    try:
+      let frame = buildUdsRequest(conn.testerAddr, ecuAddr, 0x10, [0x01'u8])
+      conn.sendFrame(frame)
+      discard conn.recvFrame()
+    except CatchableError:
+      discard
 
 # ---------------------------------------------------------------------------
 # High-level read-only diagnostic operations
@@ -506,12 +573,18 @@ type
     did: uint16
     jsonOutput: bool
     testerAddr: uint16
+    force: bool
 
 proc printUsage() =
   echo "ista-enet: Read-only BMW ENET/HSFZ diagnostic client"
   echo ""
-  echo "SAFETY: Write operations are hard-blocked at the protocol layer."
-  echo "        This tool can NEVER modify car systems."
+  echo "SAFETY:"
+  echo "  - Write operations are hard-blocked at the protocol layer."
+  echo "    This tool can NEVER modify car systems."
+  echo "  - Will NOT connect if ISTA is running. ISTA owns the diagnostic"
+  echo "    session — connecting simultaneously could corrupt its comms."
+  echo "  - Returns all ECUs to default session on disconnect (cleanup)."
+  echo "  - Uses tester address 0xF5 (ISTA uses 0xF4) to avoid conflicts."
   echo ""
   echo "Usage:"
   echo "  ista-enet faults [--ecu 0x00] [--host 169.254.0.10] [--json]"
@@ -530,8 +603,9 @@ proc printUsage() =
   echo "  --port <port>     ENET port (default: 6801)"
   echo "  --ecu <addr>      ECU address in hex (default: 0x00 = DME)"
   echo "  --did <id>        Data identifier in hex (for 'data' command)"
-  echo "  --tester <addr>   Tester address in hex (default: 0xF4)"
+  echo "  --tester <addr>   Tester address in hex (default: 0xF5)"
   echo "  --json, -j        JSON output (for orchestrator integration)"
+  echo "  --force            Connect even if ISTA is running (NOT RECOMMENDED)"
   echo "  --help, -h        Show this help"
 
 proc parseHex(s: string): uint16 =
@@ -543,8 +617,9 @@ proc parseCli(): CliOptions =
   result.port = DefaultPort
   result.ecuAddr = 0x00
   result.did = DidVin
-  result.testerAddr = 0xF4
+  result.testerAddr = DefaultTesterAddr
   result.command = cmdHelp
+  result.force = false
 
   var p = initOptParser(commandLineParams())
   var positionalDone = false
@@ -573,6 +648,7 @@ proc parseCli(): CliOptions =
       of "did": result.did = parseHex(p.val)
       of "tester": result.testerAddr = parseHex(p.val)
       of "json", "j": result.jsonOutput = true
+      of "force": result.force = true
       of "help", "h":
         result.command = cmdHelp
       else: discard
@@ -580,7 +656,7 @@ proc parseCli(): CliOptions =
 proc runFaults(opts: CliOptions) =
   let conn = newEnetConnection(opts.host, opts.port, opts.testerAddr)
   try:
-    conn.connect()
+    conn.connect(opts.force)
     conn.doHandshake()
     discard conn.sendUds(opts.ecuAddr, 0x10, [0x03'u8])  # extended session
     let faults = conn.readFaults(opts.ecuAddr)
@@ -599,7 +675,7 @@ proc runFaults(opts: CliOptions) =
 proc runEcus(opts: CliOptions) =
   let conn = newEnetConnection(opts.host, opts.port, opts.testerAddr)
   try:
-    conn.connect()
+    conn.connect(opts.force)
     conn.doHandshake()
     let ecus = conn.scanEcus()
     if opts.jsonOutput:
@@ -625,7 +701,7 @@ proc runEcus(opts: CliOptions) =
 proc runData(opts: CliOptions) =
   let conn = newEnetConnection(opts.host, opts.port, opts.testerAddr)
   try:
-    conn.connect()
+    conn.connect(opts.force)
     conn.doHandshake()
     discard conn.sendUds(opts.ecuAddr, 0x10, [0x03'u8])
     let data = conn.readDataById(opts.ecuAddr, opts.did)
@@ -660,7 +736,7 @@ proc runData(opts: CliOptions) =
 proc runVin(opts: CliOptions) =
   let conn = newEnetConnection(opts.host, opts.port, opts.testerAddr)
   try:
-    conn.connect()
+    conn.connect(opts.force)
     conn.doHandshake()
     let vin = conn.readVin(opts.ecuAddr)
     if opts.jsonOutput:

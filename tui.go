@@ -1232,9 +1232,11 @@ func (m tuiModel) viewLive() string {
 	var b strings.Builder
 
 	b.WriteString(styleTitle.Render("Live Diagnostics") +
-		styleSubtitle.Render("  ista-enet (read-only)") + "\n\n")
+		styleSubtitle.Render("  ista-enet (Nim, read-only)") + "\n\n")
 
-	b.WriteString(styleFail.Render("SAFETY: Read-only mode — write operations are blocked at the protocol layer") + "\n\n")
+	b.WriteString(styleFail.Render("SAFETY: Read-only. Writes blocked at protocol layer.") + "\n")
+	b.WriteString(styleFail.Render("        Will NOT connect if ISTA is running.") + "\n")
+	b.WriteString(styleFail.Render("        Cannot interfere with any running session.") + "\n\n")
 
 	// Mode selector
 	for i, mode := range liveModes {

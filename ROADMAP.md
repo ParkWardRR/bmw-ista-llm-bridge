@@ -238,6 +238,10 @@ Purpose-built tools in languages optimized for each task, orchestrated by Go at 
 - [x] UDS read-only service subset (0x10, 0x19, 0x22, 0x23, 0x27, 0x2A, 0x3E)
 - [x] Hard-blocked write services at protocol layer (0x14, 0x2E, 0x2F, 0x31, 0x34-0x37, 0x3D)
 - [x] SafetyError exception before any blocked service reaches the wire
+- [x] ISTA session detection — refuses to connect if ISTAGUI.exe or IstaServicesHost.exe is running
+- [x] Separate tester address (0xF5 vs ISTA's 0xF4) to avoid response-routing conflicts
+- [x] ECU session cleanup on disconnect — returns touched ECUs to default session
+- [x] `--force` flag to override ISTA detection (with warning, not recommended)
 - [x] ECU scanning with known F-series address map
 - [x] DTC reading with status bit parsing (testFailed, confirmedDTC, warningIndicator, etc.)
 - [x] ReadDataByIdentifier for VIN, HW/SW version, supplier, serial

@@ -60,6 +60,7 @@
   <img src="https://img.shields.io/badge/Car%20Access-READ--ONLY-critical?style=flat-square" alt="Read-Only">
   <img src="https://img.shields.io/badge/Write%20UDS-BLOCKED-critical?style=flat-square" alt="Write Blocked">
   <img src="https://img.shields.io/badge/Protocol%20Layer-Hard%20Enforced-critical?style=flat-square" alt="Protocol Enforced">
+  <img src="https://img.shields.io/badge/ISTA%20Sessions-NEVER%20INTERFERED-critical?style=flat-square" alt="No Interference">
 </p>
 
 ---
@@ -414,7 +415,13 @@ Delegates to the Odin-based `ista-keyextract` tool, which performs native PE/CLI
 
 ### `ista-enet` (Satellite — Nim)
 
-Read-only diagnostic client for BMW F-series vehicles over ENET/HSFZ. **Write operations are hard-blocked at the protocol layer — they never reach the wire.**
+Read-only diagnostic client for BMW F-series vehicles over ENET/HSFZ.
+
+**Non-interference guarantees:**
+- **Write operations are hard-blocked at the protocol layer** — they raise `SafetyError` before serialization and never reach the wire.
+- **Will NOT connect if ISTA is running.** Before connecting, ista-enet checks for ISTAGUI.exe and IstaServicesHost.exe processes. If either is detected, it refuses to connect — ISTA owns the diagnostic session and connecting simultaneously could corrupt its active communication with the vehicle.
+- **Uses tester address 0xF5** (ISTA uses 0xF4) so even in `--force` mode, UDS response routing stays separate.
+- **Cleans up on disconnect** — every ECU switched to extended diagnostic session is returned to default session before the connection closes.
 
 ```bash
 # Read faults from DME (engine ECU)
@@ -442,8 +449,9 @@ ista-enet.exe faults --host 169.254.0.1 --json
 | `--port` | `6801` | ENET port |
 | `--ecu` | `0x00` | ECU address (hex) |
 | `--did` | `0xF190` | Data identifier (hex, for `data` command) |
-| `--tester` | `0xF4` | Tester logical address |
+| `--tester` | `0xF5` | Tester logical address (deliberately different from ISTA's 0xF4) |
 | `--json` | false | JSON output for orchestrator integration |
+| `--force` | false | Connect even if ISTA is running (**not recommended**) |
 
 **Blocked UDS services** (raise `SafetyError` before serialization):
 `ClearDiagnosticInformation (0x14)`, `WriteDataByIdentifier (0x2E)`, `InputOutputControlByIdentifier (0x2F)`, `RoutineControl (0x31)`, `RequestDownload (0x34)`, `RequestUpload (0x35)`, `TransferData (0x36)`, `RequestTransferExit (0x37)`, `WriteMemoryByAddress (0x3D)`, `CommunicationControl (0x28)`, `ControlDTCSetting (0x85)`.
@@ -822,7 +830,14 @@ See [ROADMAP.md](ROADMAP.md) for the full phased plan.
 <details>
 <summary><strong>Does this modify ISTA or my car in any way?</strong></summary>
 
-No. ista-bridge is strictly read-only. It captures screenshots of the ISTA window and reads XML files that ISTA writes to disk. The `ista-enet` satellite can connect directly to the car over ENET, but **write UDS services are hard-blocked at the protocol layer** — they raise a `SafetyError` before being serialized to the wire. There is no configuration, flag, or override that enables writes. The car is always read-only.
+No. ista-bridge is strictly read-only and **will never interfere with a running ISTA session**.
+
+- **Screenshot capture** uses Win32 `PrintWindow` to read pixels — it does not send input, change focus, or modify ISTA's state in any way.
+- **Session file reading** opens ISTA's XML files read-only. It never writes to ISTA's directories.
+- **DiagDocDb queries** are SELECT-only against the encrypted database. No writes.
+- **ista-enet** (live vehicle reads) checks for running ISTA processes before connecting. If ISTA is running, it **refuses to connect** — ISTA owns the diagnostic session. Even with `--force`, it uses a separate tester address (0xF5 vs ISTA's 0xF4) and cleans up ECU sessions on disconnect. Write UDS services are hard-blocked at the protocol layer — they raise a `SafetyError` before being serialized to the wire. There is no configuration, flag, or override that enables writes.
+
+The car is always read-only. A running ISTA session is never disrupted.
 </details>
 
 <details>

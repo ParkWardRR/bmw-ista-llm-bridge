@@ -168,7 +168,8 @@ func captureWindow(hwnd syscall.Handle) ([]byte, int, int, error) {
 	old, _, _ := pSelectObject.Call(hdcMem, hBmp)
 	defer pSelectObject.Call(hdcMem, old)
 
-	// PrintWindow with PW_RENDERFULLCONTENT works for DX/WPF/Chromium apps
+	// PrintWindow reads pixels only — it does not send input, change focus, or
+	// modify ISTA's state. It cannot interfere with a running diagnostic session.
 	ret, _, _ := pPrintWindow.Call(uintptr(hwnd), hdcMem, pwRenderfullcontent)
 	if ret == 0 {
 		// Fallback: BitBlt from client DC

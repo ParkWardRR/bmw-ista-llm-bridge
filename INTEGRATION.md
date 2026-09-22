@@ -328,13 +328,21 @@ Ordered by impact on the F22/F30 diagnostic workflow:
 
 ## Part 4 — Safety and scope boundaries
 
-All integrations must respect the project's absolute read-only posture:
+All integrations must respect the project's absolute read-only and non-interference posture:
 
 1. **Read-only. Always. No exceptions.** There is no approval gate because there is no write path. The `ista-enet` satellite hard-blocks write UDS services (0x2E WriteDataByIdentifier, 0x2F InputOutputControlByIdentifier, 0x31 RoutineControl, 0x34–0x37 flash/programming, 0x3D WriteMemoryByAddress, 0x14 ClearDiagnosticInformation, 0x28 CommunicationControl, 0x85 ControlDTCSetting) at the protocol layer — they raise `SafetyError` before being serialized to the wire. This is not a policy that can be overridden by configuration or LLM request.
 
 2. **No flashing, no programming, no DTC clearing, no coding, no adaptation, no actuator control.** ista-bridge is a diagnostic observation and query tool. It reads from the car. It never writes to the car.
 
-3. **Offline-capable.** Every integration should work without a car connected. Live features (ista-enet) are additive — the core bundle/parse/query workflow must never require a vehicle connection.
+3. **Never interfere with a running ISTA session.** This is as critical as read-only. ISTA owns the diagnostic session — ista-bridge must never disrupt it:
+   - **ista-enet** checks for ISTAGUI.exe and IstaServicesHost.exe before connecting. If either is running, it refuses to connect. The `--force` flag overrides this but uses a separate tester address (0xF5 vs ISTA's 0xF4) to avoid response-routing conflicts.
+   - **ista-enet** returns all ECUs to default diagnostic session on disconnect — it cleans up after itself so the car is in the same state as before.
+   - **Screenshot capture** uses Win32 `PrintWindow` to read pixels. It does not send input, change focus, or modify ISTA's window state.
+   - **Session file reading** opens ISTA's XML/log files read-only. It never writes to ISTA's directories.
+   - **DiagDocDb queries** are SELECT-only. No INSERT, UPDATE, DELETE, or DDL.
+   - **No component of ista-bridge may hold locks, files, ports, or resources that ISTA needs.** If there is any doubt, don't connect.
+
+4. **Offline-capable.** Every integration should work without a car connected. Live features (ista-enet) are additive — the core bundle/parse/query workflow must never require a vehicle connection.
 
 4. **Data provenance.** When a bundle includes data from multiple sources (ista-bridge session + BMWeb scan + ista-enet live read), each data point is tagged with its `data_source` field so the LLM knows what it's looking at. The `ista-import` tool sets this automatically.
 
