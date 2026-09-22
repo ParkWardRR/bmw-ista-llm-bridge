@@ -14,11 +14,36 @@
 </p>
 
 <p align="center">
+  <strong>Quality & Testing</strong><br>
+  <img src="https://img.shields.io/badge/Tests-75%20passing-brightgreen?style=flat-square&logo=testinglibrary&logoColor=white" alt="Tests">
+  <img src="https://img.shields.io/badge/Local%20CI-make%20ci-blue?style=flat-square&logo=gnu-bash&logoColor=white" alt="Local CI">
+  <img src="https://img.shields.io/badge/go%20vet-passing-brightgreen?style=flat-square&logo=go&logoColor=white" alt="go vet">
+  <img src="https://img.shields.io/badge/gofmt-formatted-brightgreen?style=flat-square&logo=go&logoColor=white" alt="gofmt">
+</p>
+
+<p align="center">
+  <strong>BMW Integration</strong><br>
+  <img src="https://img.shields.io/badge/BMW-ISTA%2FD-0066B1?style=flat-square" alt="BMW ISTA/D">
+  <img src="https://img.shields.io/badge/DiagDocDb-7.6%20GB%20SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white" alt="DiagDocDb">
+  <img src="https://img.shields.io/badge/VIN%20Ranges-7.9M-0066B1?style=flat-square" alt="VIN Ranges">
+  <img src="https://img.shields.io/badge/Tables-232-003B57?style=flat-square" alt="Tables">
+  <img src="https://img.shields.io/badge/FASTA-Bilingual%20XML-555555?style=flat-square" alt="FASTA">
+</p>
+
+<p align="center">
   <strong>Hardware Acceleration</strong><br>
   <img src="https://img.shields.io/badge/Intel-QSV-0071C5?style=flat-square&logo=intel&logoColor=white" alt="Intel QSV">
   <img src="https://img.shields.io/badge/NVIDIA-NVENC-76B900?style=flat-square&logo=nvidia&logoColor=white" alt="NVIDIA NVENC">
   <img src="https://img.shields.io/badge/AMD-AMF-ED1C24?style=flat-square&logo=amd&logoColor=white" alt="AMD AMF">
   <img src="https://img.shields.io/badge/CPU-AVX2%20%7C%20NEON-333333?style=flat-square" alt="CPU SIMD">
+</p>
+
+<p align="center">
+  <strong>TUI & Capture</strong><br>
+  <img src="https://img.shields.io/badge/Bubble%20Tea-TUI-FF75B7?style=flat-square" alt="Bubble Tea">
+  <img src="https://img.shields.io/badge/Lip%20Gloss-Styling-FF75B7?style=flat-square" alt="Lip Gloss">
+  <img src="https://img.shields.io/badge/Win32-PrintWindow%20%7C%20BitBlt-0078D4?style=flat-square&logo=windows11&logoColor=white" alt="Win32 APIs">
+  <img src="https://img.shields.io/badge/PowerShell-32--bit%20Bridge-5391FE?style=flat-square&logo=powershell&logoColor=white" alt="PowerShell">
 </p>
 
 <p align="center">
