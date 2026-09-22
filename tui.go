@@ -1,3 +1,5 @@
+//go:build windows
+
 package main
 
 import (
@@ -67,12 +69,12 @@ var (
 			Foreground(clrGray)
 
 	styleSep = lipgloss.NewStyle().
-		Foreground(clrDim)
+			Foreground(clrDim)
 
 	styleBox = lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(bmwBlue).
-		Padding(0, 2)
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(bmwBlue).
+			Padding(0, 2)
 
 	styleHelp = lipgloss.NewStyle().
 			Foreground(clrDim).

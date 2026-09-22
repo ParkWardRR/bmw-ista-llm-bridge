@@ -10,12 +10,12 @@ import (
 )
 
 type Config struct {
-	Window   WindowConfig  `toml:"window"`
-	Capture  CaptureConfig `toml:"capture"`
+	Window   WindowConfig   `toml:"window"`
+	Capture  CaptureConfig  `toml:"capture"`
 	Encoding EncodingConfig `toml:"encoding"`
-	Output   OutputConfig  `toml:"output"`
-	Logging  LoggingConfig `toml:"logging"`
-	ISTA     ISTAConfig    `toml:"ista"`
+	Output   OutputConfig   `toml:"output"`
+	Logging  LoggingConfig  `toml:"logging"`
+	ISTA     ISTAConfig     `toml:"ista"`
 }
 
 type WindowConfig struct {

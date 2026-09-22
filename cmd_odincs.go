@@ -56,10 +56,10 @@ func runOdincs(args []string) {
 }
 
 type keyExtractResult struct {
-	Source        string `json:"source"`
-	Path          string `json:"path"`
+	Source         string `json:"source"`
+	Path           string `json:"path"`
 	PublicKeyToken string `json:"public_key_token"`
-	DBPassword    string `json:"db_password"`
+	DBPassword     string `json:"db_password"`
 }
 
 func extractKeyWithOdin(dllPath string) (string, error) {

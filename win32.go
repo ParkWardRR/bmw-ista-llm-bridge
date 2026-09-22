@@ -1,3 +1,5 @@
+//go:build windows
+
 package main
 
 import (
@@ -32,10 +34,10 @@ var (
 )
 
 const (
-	srccopy              = 0x00CC0020
-	dibRGBColors         = 0
-	biRGB                = 0
-	pwRenderfullcontent  = 0x00000002
+	srccopy             = 0x00CC0020
+	dibRGBColors        = 0
+	biRGB               = 0
+	pwRenderfullcontent = 0x00000002
 )
 
 type rect struct {
