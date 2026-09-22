@@ -67,7 +67,7 @@
 ## What is this?
 
 <p align="center">
-  <img src="demo/dashboard.gif" alt="ista-bridge TUI dashboard" width="100%">
+  <img src="demo/bridge-dashboard.png" alt="ista-bridge — LLM bridge dashboard" width="600">
 </p>
 
 **ista-bridge** is an LLM bridge for BMW diagnostics. It gathers everything — ISTA session data, live vehicle faults over ENET, DiagDocDb lookups, imported scans from other tools — and compresses it into a compact, token-efficient context that fits any LLM's context window. One key press gathers, one key press copies to clipboard, then paste into Claude or ChatGPT and ask *"what's wrong with my car?"*
@@ -89,16 +89,16 @@ Run ISTA, diagnose your car, and **ista-bridge** does four things:
 
 Then you paste `summary.md` into Claude or ChatGPT and ask *"what's wrong with my car?"* — with full context.
 
-### VIN Lookup
+### Gather & Build Context
 
 <p align="center">
-  <img src="demo/vin-lookup.gif" alt="VIN lookup workflow" width="100%">
+  <img src="demo/bridge-gather.png" alt="ista-bridge — gathering diagnostic data" width="600">
 </p>
 
-### Fault Code Search
+### Context View — Toggle Sections, Copy to LLM
 
 <p align="center">
-  <img src="demo/fault-lookup.gif" alt="Fault code lookup workflow" width="100%">
+  <img src="demo/bridge-context.png" alt="ista-bridge — LLM context view with token estimates" width="600">
 </p>
 
 ---
@@ -219,7 +219,8 @@ The TUI is oriented around the bridge workflow: **gather → build context → c
 |---|---|
 | `Space` | Toggle section on/off (adjusts token count in real-time) |
 | `c` | Copy context to clipboard — ready to paste into your LLM |
-| `w` | Save context to file |
+| `w` | Save context to file (`context.txt`) |
+| `p` | Print to stdout and exit (pipeable: `ista-bridge \| clip`) |
 | `↑↓` | Navigate sections |
 | `Esc` | Back to dashboard |
 

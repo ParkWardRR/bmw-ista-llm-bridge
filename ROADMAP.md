@@ -180,6 +180,9 @@ Full-featured terminal UI (Bubble Tea) for interactive diagnostic workflows with
 - [x] Live preview with syntax-highlighted output (ACTIVE/STORED/FAIL/PASS)
 - [x] [c] Copy to clipboard, [w] Save to file
 - [x] Tools menu for secondary features (ENET, import)
+- [x] [p] Print to stdout and exit — pipeable to clipboard or file
+- [x] Status flash messages (3-second auto-clear for success/failure feedback)
+- [x] Demo screenshots: bridge-dashboard.png, bridge-gather.png, bridge-context.png
 
 ### Cross-platform
 - [x] macOS/Linux — full bridge TUI with mock vehicle/session data
