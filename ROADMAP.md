@@ -152,7 +152,7 @@ Full-featured terminal UI (Bubble Tea) for interactive diagnostic workflows with
 - [x] System status overview (ISTA install, encoder, sessions, DiagDocDb connectivity)
 - [x] Capture statistics (screenshots, total size, session count, last capture time)
 - [x] Menu-driven navigation with keyboard shortcuts
-- [x] Context-aware menu — database features hidden when DiagDocDb is not accessible
+- [x] Context-aware menu — database features hidden when DiagDocDb is not accessible, live/import hidden when satellites not built
 
 ### Views
 - [x] **Watch** — live capture with real-time stats (count, size, pHash skips, duration, last file)
@@ -161,6 +161,8 @@ Full-featured terminal UI (Bubble Tea) for interactive diagnostic workflows with
 - [x] **VIN Lookup** — text input with async database query and formatted result cards
 - [x] **Fault Code Lookup** — multi-mode search (P-code, fault code, Check Control, diag code) with Tab/number-key mode switching
 - [x] **Report** — auto-generates Markdown + HTML diagnostic report with progress spinner
+- [x] **Live** — read-only ENET diagnostics via `ista-enet` (faults/ECUs/VIN modes, Tab/1-3 switching, read-only safety banner)
+- [x] **Import** — multi-format data import via `ista-import` (text input for file path, auto-format detection, result summary)
 
 ### UX
 - [x] Bubble Tea state machine with view routing (dashboard → VIN/lookup/report → results)
@@ -200,6 +202,29 @@ Purpose-built tools in languages optimized for each task, orchestrated by Go at 
 - [x] SHA-1 key token computation without .NET runtime
 - [x] Replaces PowerShell-based key extraction for speed
 
+### ista-enet (Nim) — HSFZ/ENET Read-Only Client
+- [x] HSFZ frame encode/decode (big-endian length + type + payload)
+- [x] UDS read-only service subset (0x10, 0x19, 0x22, 0x23, 0x27, 0x2A, 0x3E)
+- [x] Hard-blocked write services at protocol layer (0x14, 0x2E, 0x2F, 0x31, 0x34-0x37, 0x3D)
+- [x] SafetyError exception before any blocked service reaches the wire
+- [x] ECU scanning with known F-series address map
+- [x] DTC reading with status bit parsing (testFailed, confirmedDTC, warningIndicator, etc.)
+- [x] ReadDataByIdentifier for VIN, HW/SW version, supplier, serial
+- [x] HSFZ handshake and alive-check handling
+- [x] JSON output mode (`--json`) for Go orchestrator integration
+- [x] CLI: `faults`, `ecus`, `data`, `vin` commands
+
+### ista-import (Nim) — Multi-Format Data Importer
+- [x] BMWeb JSON scan import with vehicle/module/fault normalization
+- [x] Beemuu snapshot import with DTC and ECU mapping
+- [x] svietlik module scan import (lighting modules, battery voltage)
+- [x] klartext diagnostic dump import
+- [x] Auto-format detection from JSON structure heuristics
+- [x] Multi-source merge with ECU dedup by address and fault dedup by (ecu, code)
+- [x] Data provenance: every record tagged with `data_source` field
+- [x] Bundle output: vehicle.json, faults.json, ecus.json, import_meta.json
+- [x] JSON stdout mode (`--json`) for Go orchestrator integration
+
 ## Phase 3.8: Satellite Orchestration [DONE]
 
 Runtime discovery and management of polyglot satellite tools.
@@ -210,6 +235,8 @@ Runtime discovery and management of polyglot satellite tools.
 - [x] `db export-lookup` — export DiagDocDb data to JSON for offline satellite consumption
 - [x] Graceful fallback: if satellite not found, Go falls back to PowerShell bridge
 - [x] Makefile for building Go + satellite tools (`make build`, `make nim`, `make gleam`, `make zig`)
+- [x] `enet` and `import` satellite entries added to tool registry
+- [x] `make nim-enet`, `make nim-import` build targets
 
 ## Phase 4: LLM Integration
 
@@ -271,6 +298,8 @@ Go is the orchestrator — it handles Win32 capture, TUI, and encrypted DB acces
 |------|----------|-----|
 | `ista-bridge` | Go | Win32 syscalls, Bubble Tea TUI, encrypted DB access, session discovery/parsing, zip.log extraction, FASTA parsing, satellite orchestration |
 | `ista-report` | Nim | All report rendering — 4 formats (Markdown, HTML, text, summary), base64 screenshot embedding, safety-first fault sorting, light/dark CSS themes |
+| `ista-enet` | Nim | HSFZ/ENET read-only diagnostic client — TCP protocol, UDS read services, hard-blocked writes at protocol layer |
+| `ista-import` | Nim | Multi-format data importer — BMWeb, Beemuu, svietlik, klartext normalization to bundle format |
 | `ista-faultlookup` | Gleam/Erlang | Pattern matching + immutable data — type-safe search across fault code datasets with JSON IPC |
 | `ista-vinlookup` | Zig | Zero-overhead binary search — microsecond VIN lookups over 7.9M ranges |
 | `ista-keyextract` | Odin | Low-level PE/CLI binary parsing — manual memory, bit manipulation, no runtime |
@@ -279,6 +308,8 @@ Go is the orchestrator — it handles Win32 capture, TUI, and encrypted DB acces
 
 Go discovers and calls the satellite tools at runtime (`orchestrate.go`). If a tool binary is found:
 - `report`, `bundle` → calls `ista-report` (Nim) for Markdown, HTML, text, and summary generation
+- `live` commands → calls `ista-enet` (Nim) for read-only ENET/HSFZ diagnostics
+- `import` commands → calls `ista-import` (Nim) for multi-format data ingestion
 - `vin` command → calls `ista-vinlookup` (Zig) against exported VINRANGES data
 - `lookup pcode/fault` → calls `ista-faultlookup` (Gleam) against exported fault data
 - `odincs` command → calls `ista-keyextract` (Odin) instead of PowerShell

@@ -3,6 +3,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -139,6 +140,21 @@ type reportDoneMsg struct {
 	err     string
 }
 
+type liveResultMsg struct {
+	mode   int // 0=faults 1=ecus 2=vin
+	ecus   []map[string]interface{}
+	faults []map[string]interface{}
+	vin    string
+	err    string
+}
+
+type importResultMsg struct {
+	outDir string
+	files  []string
+	result string
+	err    string
+}
+
 type tickMsg time.Time
 
 // ---------------------------------------------------------------------------
@@ -155,6 +171,8 @@ const (
 	viewVIN
 	viewLookup
 	viewReport
+	viewLive
+	viewImport
 )
 
 // ---------------------------------------------------------------------------
@@ -226,6 +244,24 @@ type tuiModel struct {
 	rptPath    string
 	rptSession string
 	rptErr     string
+
+	// Live state (ista-enet)
+	liveRunning bool
+	liveDone    bool
+	liveMode    int // 0=faults 1=ecus 2=vin
+	liveEcus    []map[string]interface{}
+	liveFaults  []map[string]interface{}
+	liveVIN     string
+	liveErr     string
+	liveToolOK  bool
+
+	// Import state (ista-import)
+	impRunning bool
+	impDone    bool
+	impFiles   []string
+	impResult  string
+	impErr     string
+	impToolOK  bool
 }
 
 func newTUIModel() tuiModel {
@@ -240,13 +276,18 @@ func newTUIModel() tuiModel {
 	ti.CharLimit = 40
 	ti.Width = 36
 
+	_, enetOK := findTool("enet")
+	_, impOK := findTool("import")
+
 	return tuiModel{
-		cfg:     cfg,
-		logger:  logger,
-		view:    viewDashboard,
-		loading: true,
-		sp:      sp,
-		input:   ti,
+		cfg:        cfg,
+		logger:     logger,
+		view:       viewDashboard,
+		loading:    true,
+		sp:         sp,
+		input:      ti,
+		liveToolOK: enetOK,
+		impToolOK:  impOK,
 	}
 }
 
@@ -308,6 +349,23 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.rptErr = msg.err
 		return m, nil
 
+	case liveResultMsg:
+		m.liveRunning = false
+		m.liveDone = true
+		m.liveEcus = msg.ecus
+		m.liveFaults = msg.faults
+		m.liveVIN = msg.vin
+		m.liveErr = msg.err
+		return m, nil
+
+	case importResultMsg:
+		m.impRunning = false
+		m.impDone = true
+		m.impFiles = msg.files
+		m.impResult = msg.result
+		m.impErr = msg.err
+		return m, nil
+
 	case tickMsg:
 		if m.view == viewWatch && m.wRunning {
 			return m, tickCmd()
@@ -357,7 +415,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKey(msg)
 	}
 
-	if m.view == viewVIN || m.view == viewLookup {
+	if m.view == viewVIN || m.view == viewLookup || m.view == viewImport {
 		var cmd tea.Cmd
 		m.input, cmd = m.input.Update(msg)
 		return m, cmd
@@ -395,6 +453,10 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.keyLookup(msg)
 	case viewReport:
 		return m.keyReport(msg)
+	case viewLive:
+		return m.keyLive(msg)
+	case viewImport:
+		return m.keyImport(msg)
 	}
 	return m, nil
 }
@@ -465,6 +527,34 @@ func (m tuiModel) keyDashboard(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m.beginReport(&m.sessions[0])
+	case "l":
+		if !m.liveToolOK {
+			return m, nil
+		}
+		m.view = viewLive
+		m.liveMode = 0
+		m.liveDone = false
+		m.liveRunning = false
+		m.liveErr = ""
+		m.liveEcus = nil
+		m.liveFaults = nil
+		m.liveVIN = ""
+		return m, nil
+	case "i":
+		if !m.impToolOK {
+			return m, nil
+		}
+		m.view = viewImport
+		m.impDone = false
+		m.impRunning = false
+		m.impErr = ""
+		m.impFiles = nil
+		m.impResult = ""
+		m.input.Placeholder = "Path to scan file (BMWeb/Beemuu/svietlik JSON)"
+		m.input.CharLimit = 255
+		m.input.Reset()
+		m.input.Focus()
+		return m, textinput.Blink
 	case "q":
 		return m, tea.Quit
 	}
@@ -607,6 +697,97 @@ func (m tuiModel) keyReport(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+var liveModes = []struct {
+	key, label string
+}{
+	{"1", "Faults"},
+	{"2", "ECUs"},
+	{"3", "VIN"},
+}
+
+func (m tuiModel) keyLive(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEsc:
+		if m.liveRunning {
+			return m, nil
+		}
+		m.view = viewDashboard
+		return m, nil
+	case tea.KeyEnter:
+		if m.liveRunning {
+			return m, nil
+		}
+		m.liveRunning = true
+		m.liveDone = false
+		m.liveErr = ""
+		m.liveEcus = nil
+		m.liveFaults = nil
+		m.liveVIN = ""
+		return m, tea.Batch(m.sp.Tick, doLiveCmd(m.liveMode))
+	case tea.KeyTab:
+		m.liveMode = (m.liveMode + 1) % len(liveModes)
+		m.liveDone = false
+		m.liveErr = ""
+		return m, nil
+	}
+
+	k := msg.String()
+	for i, mode := range liveModes {
+		if k == mode.key {
+			m.liveMode = i
+			m.liveDone = false
+			m.liveErr = ""
+			return m, nil
+		}
+	}
+
+	if m.liveDone || m.liveErr != "" {
+		m.view = viewDashboard
+		m.liveDone = false
+		m.liveErr = ""
+		return m, nil
+	}
+	return m, nil
+}
+
+func (m tuiModel) keyImport(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEsc:
+		if m.impRunning {
+			return m, nil
+		}
+		m.view = viewDashboard
+		m.input.Blur()
+		return m, nil
+	case tea.KeyEnter:
+		if m.impRunning {
+			return m, nil
+		}
+		path := strings.TrimSpace(m.input.Value())
+		if path == "" {
+			return m, nil
+		}
+		m.impRunning = true
+		m.impDone = false
+		m.impErr = ""
+		return m, tea.Batch(m.sp.Tick, doImportCmd(path))
+	}
+
+	if m.impDone || m.impErr != "" {
+		if msg.String() != "" {
+			m.impDone = false
+			m.impErr = ""
+			m.input.Reset()
+			m.input.Focus()
+			return m, textinput.Blink
+		}
+	}
+
+	var cmd tea.Cmd
+	m.input, cmd = m.input.Update(msg)
+	return m, cmd
+}
+
 func (m tuiModel) beginReport(s *Session) (tea.Model, tea.Cmd) {
 	m.view = viewReport
 	m.rptRunning = true
@@ -653,6 +834,10 @@ func (m tuiModel) View() string {
 		content = m.viewFaultLookup()
 	case viewReport:
 		content = m.viewReportGen()
+	case viewLive:
+		content = m.viewLive()
+	case viewImport:
+		content = m.viewImportData()
 	}
 	return lipgloss.NewStyle().Padding(1, 2).Render(content)
 }
@@ -743,6 +928,13 @@ func (m tuiModel) viewDashboard() string {
 	type mi struct{ k, d string }
 	row1 := []mi{{"w", "Watch"}, {"s", "Sessions"}, {"b", "Bundle latest"}}
 	row2 := []mi{{"v", "VIN Lookup"}, {"f", "Fault Code"}, {"r", "Report"}}
+	row3 := []mi{}
+	if m.liveToolOK {
+		row3 = append(row3, mi{"l", "Live (ENET)"})
+	}
+	if m.impToolOK {
+		row3 = append(row3, mi{"i", "Import"})
+	}
 
 	render := func(items []mi) string {
 		parts := make([]string, len(items))
@@ -755,6 +947,9 @@ func (m tuiModel) viewDashboard() string {
 	b.WriteString(render(row1) + "\n")
 	if m.dbOK {
 		b.WriteString(render(row2) + "\n")
+	}
+	if len(row3) > 0 {
+		b.WriteString(render(row3) + "\n")
 	}
 	b.WriteString(styleMenuKey.Render("[q]") + " " + styleMenuDesc.Render("Quit") + "\n")
 
@@ -1030,6 +1225,159 @@ func (m tuiModel) viewReportGen() string {
 		b.WriteString(styleHelp.Render("Press any key to return"))
 	}
 
+	return b.String()
+}
+
+func (m tuiModel) viewLive() string {
+	var b strings.Builder
+
+	b.WriteString(styleTitle.Render("Live Diagnostics") +
+		styleSubtitle.Render("  ista-enet (read-only)") + "\n\n")
+
+	b.WriteString(styleFail.Render("SAFETY: Read-only mode — write operations are blocked at the protocol layer") + "\n\n")
+
+	// Mode selector
+	for i, mode := range liveModes {
+		if i == m.liveMode {
+			b.WriteString(styleMenuKey.Render("["+mode.key+"]") + " " +
+				styleOK.Render(mode.label) + "  ")
+		} else {
+			b.WriteString(styleMenuKey.Render("["+mode.key+"]") + " " +
+				styleMenuDesc.Render(mode.label) + "  ")
+		}
+	}
+	b.WriteString("\n\n")
+
+	if m.liveRunning {
+		b.WriteString(m.sp.View() + " Connecting to vehicle via ENET...\n")
+		return b.String()
+	}
+
+	if m.liveErr != "" {
+		b.WriteString(styleError.Render("Error: "+m.liveErr) + "\n\n")
+		b.WriteString(styleHelp.Render("Press any key to return"))
+		return b.String()
+	}
+
+	if m.liveDone {
+		switch m.liveMode {
+		case 0: // faults
+			if len(m.liveFaults) == 0 {
+				b.WriteString(styleOK.Render("No faults found.") + "\n")
+			} else {
+				b.WriteString(styleSection.Render(
+					fmt.Sprintf("Found %d fault(s)", len(m.liveFaults))) + "\n\n")
+				limit := len(m.liveFaults)
+				if limit > 12 {
+					limit = 12
+				}
+				for i := 0; i < limit; i++ {
+					f := m.liveFaults[i]
+					code := fmtVal(f, "dtc_code")
+					status := fmtVal(f, "status_text")
+					present := fmtVal(f, "present")
+					marker := "[STORED]"
+					markerStyle := styleSubtitle
+					if present == "true" {
+						marker = "[ACTIVE]"
+						markerStyle = styleFail
+					}
+					b.WriteString(markerStyle.Render(marker) + " " +
+						styleNeutral.Render("DTC 0x"+code) + " " +
+						styleSubtitle.Render(status) + "\n")
+				}
+				if len(m.liveFaults) > 12 {
+					b.WriteString(styleSubtitle.Render(
+						fmt.Sprintf("  ... and %d more", len(m.liveFaults)-12)) + "\n")
+				}
+			}
+		case 1: // ecus
+			if len(m.liveEcus) == 0 {
+				b.WriteString(styleSubtitle.Render("No ECUs responded.") + "\n")
+			} else {
+				b.WriteString(styleSection.Render(
+					fmt.Sprintf("Found %d ECU(s)", len(m.liveEcus))) + "\n\n")
+				for _, e := range m.liveEcus {
+					addr := fmtVal(e, "address_hex")
+					vin := fmtVal(e, "vin")
+					hw := fmtVal(e, "hw_version")
+					sw := fmtVal(e, "sw_version")
+					supplier := fmtVal(e, "supplier")
+
+					var lines []string
+					lines = append(lines, styleLabel.Render("Address")+styleNeutral.Render(addr))
+					if vin != "" {
+						lines = append(lines, styleLabel.Render("VIN")+styleNeutral.Render(vin))
+					}
+					if hw != "" {
+						lines = append(lines, styleLabel.Render("HW")+styleNeutral.Render(hw))
+					}
+					if sw != "" {
+						lines = append(lines, styleLabel.Render("SW")+styleNeutral.Render(sw))
+					}
+					if supplier != "" {
+						lines = append(lines, styleLabel.Render("Supplier")+styleNeutral.Render(supplier))
+					}
+					b.WriteString(styleBox.Render(strings.Join(lines, "\n")) + "\n")
+				}
+			}
+		case 2: // vin
+			if m.liveVIN != "" {
+				b.WriteString(styleSection.Render("Vehicle Identification") + "\n\n")
+				b.WriteString(styleBox.Render(
+					styleLabel.Render("VIN")+styleNeutral.Render(m.liveVIN)) + "\n")
+			} else {
+				b.WriteString(styleSubtitle.Render("Could not read VIN from ECU.") + "\n")
+			}
+		}
+
+		b.WriteString("\n" + styleHelp.Render("Press any key to return"))
+		return b.String()
+	}
+
+	b.WriteString(styleHelp.Render("Enter: Run   Tab: Mode   1-3: Select mode   Esc: Back"))
+	return b.String()
+}
+
+func (m tuiModel) viewImportData() string {
+	var b strings.Builder
+
+	b.WriteString(styleTitle.Render("Import Diagnostic Data") +
+		styleSubtitle.Render("  ista-import") + "\n\n")
+
+	b.WriteString(styleSubtitle.Render("Import scans from BMWeb, Beemuu, svietlik, or klartext.") + "\n")
+	b.WriteString(styleSubtitle.Render("Auto-detects format from JSON structure.") + "\n\n")
+
+	b.WriteString(styleLabel.Render("File") + m.input.View() + "\n\n")
+
+	if m.impRunning {
+		b.WriteString(m.sp.View() + " Importing and normalizing...\n")
+		return b.String()
+	}
+
+	if m.impErr != "" {
+		b.WriteString(styleError.Render("Error: "+m.impErr) + "\n\n")
+		b.WriteString(styleHelp.Render("Press any key to try again"))
+		return b.String()
+	}
+
+	if m.impDone {
+		b.WriteString(styleOK.Render("Import complete!") + "\n\n")
+		if m.impResult != "" {
+			b.WriteString(styleSubtitle.Render(m.impResult) + "\n\n")
+		}
+		if len(m.impFiles) > 0 {
+			var fl []string
+			for _, f := range m.impFiles {
+				fl = append(fl, styleOK.Render("  + ")+styleNeutral.Render(f))
+			}
+			b.WriteString(styleBox.Render(strings.Join(fl, "\n")) + "\n\n")
+		}
+		b.WriteString(styleHelp.Render("Press any key to try again"))
+		return b.String()
+	}
+
+	b.WriteString(styleHelp.Render("Enter: Import   Esc: Back"))
 	return b.String()
 }
 
@@ -1443,6 +1791,82 @@ func doReportCmd(logger *slog.Logger, s Session, outDir string) tea.Cmd {
 
 		sessionDesc := s.Timestamp.Format("2006-01-02 15:04") + "  " + s.VIN
 		return reportDoneMsg{path: reportPath, session: sessionDesc}
+	}
+}
+
+func doLiveCmd(mode int) tea.Cmd {
+	return func() tea.Msg {
+		var args []string
+		switch mode {
+		case 0:
+			args = []string{"faults", "--json"}
+		case 1:
+			args = []string{"ecus", "--json"}
+		case 2:
+			args = []string{"vin", "--json"}
+		}
+
+		out, err := runTool("enet", args...)
+		if err != nil {
+			return liveResultMsg{mode: mode, err: err.Error()}
+		}
+
+		var result liveResultMsg
+		result.mode = mode
+
+		switch mode {
+		case 0: // faults
+			var data struct {
+				Faults []map[string]interface{} `json:"faults"`
+			}
+			if jerr := json.Unmarshal(out, &data); jerr != nil {
+				return liveResultMsg{mode: mode, err: fmt.Sprintf("parse error: %v", jerr)}
+			}
+			result.faults = data.Faults
+		case 1: // ecus
+			var data struct {
+				Ecus []map[string]interface{} `json:"ecus"`
+			}
+			if jerr := json.Unmarshal(out, &data); jerr != nil {
+				return liveResultMsg{mode: mode, err: fmt.Sprintf("parse error: %v", jerr)}
+			}
+			result.ecus = data.Ecus
+		case 2: // vin
+			var data struct {
+				VIN string `json:"vin"`
+			}
+			if jerr := json.Unmarshal(out, &data); jerr != nil {
+				return liveResultMsg{mode: mode, err: fmt.Sprintf("parse error: %v", jerr)}
+			}
+			result.vin = data.VIN
+		}
+		return result
+	}
+}
+
+func doImportCmd(path string) tea.Cmd {
+	return func() tea.Msg {
+		out, err := runTool("import", "--auto", path, "--json")
+		if err != nil {
+			return importResultMsg{err: err.Error()}
+		}
+
+		var data struct {
+			Vehicle struct {
+				VIN string `json:"vin"`
+			} `json:"vehicle"`
+			Faults       []interface{} `json:"faults"`
+			Ecus         []interface{} `json:"ecus"`
+			ImportSource string        `json:"import_source"`
+		}
+		if jerr := json.Unmarshal(out, &data); jerr != nil {
+			return importResultMsg{err: fmt.Sprintf("parse error: %v", jerr)}
+		}
+
+		result := fmt.Sprintf("Source: %s  VIN: %s  ECUs: %d  Faults: %d",
+			data.ImportSource, data.Vehicle.VIN, len(data.Ecus), len(data.Faults))
+		files := []string{"vehicle.json", "faults.json", "ecus.json", "import_meta.json"}
+		return importResultMsg{result: result, files: files}
 	}
 }
 

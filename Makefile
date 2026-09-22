@@ -1,4 +1,4 @@
-.PHONY: all build clean nim gleam zig go test vet lint fmt ci check
+.PHONY: all build clean nim nim-report nim-enet nim-import gleam zig go test vet lint fmt ci check
 
 all: build
 
@@ -7,8 +7,16 @@ build: go nim
 go:
 	GOOS=windows go build -o ista-bridge.exe .
 
-nim:
+nim: nim-report nim-enet nim-import
+
+nim-report:
 	cd polyglot/nim/report_gen && nim c -d:release -o:ista-report.exe report_gen.nim
+
+nim-enet:
+	cd polyglot/nim/enet_client && nim c -d:release -d:ssl -o:ista-enet.exe enet_client.nim
+
+nim-import:
+	cd polyglot/nim/data_import && nim c -d:release -o:ista-import.exe data_import.nim
 
 gleam:
 	cd polyglot/gleam/fault_lookup && gleam build
@@ -19,7 +27,11 @@ zig:
 clean:
 	rm -f ista-bridge.exe
 	rm -f polyglot/nim/report_gen/ista-report.exe
+	rm -f polyglot/nim/enet_client/ista-enet.exe
+	rm -f polyglot/nim/data_import/ista-import.exe
 	rm -rf polyglot/nim/report_gen/nimcache
+	rm -rf polyglot/nim/enet_client/nimcache
+	rm -rf polyglot/nim/data_import/nimcache
 	rm -rf polyglot/gleam/fault_lookup/build
 	rm -rf polyglot/zig/data_processor/zig-out
 
@@ -44,6 +56,12 @@ check:
 	@if [ -f polyglot/nim/report_gen/ista-report.exe ]; then \
 		polyglot/nim/report_gen/ista-report.exe --help > /dev/null && echo "  nim:  OK" || echo "  nim:  FAIL"; \
 	else echo "  nim:  not built (skipped)"; fi
+	@if [ -f polyglot/nim/enet_client/ista-enet.exe ]; then \
+		polyglot/nim/enet_client/ista-enet.exe --help > /dev/null && echo "  nim-enet: OK" || echo "  nim-enet: FAIL"; \
+	else echo "  nim-enet: not built (skipped)"; fi
+	@if [ -f polyglot/nim/data_import/ista-import.exe ]; then \
+		polyglot/nim/data_import/ista-import.exe --help > /dev/null && echo "  nim-import: OK" || echo "  nim-import: FAIL"; \
+	else echo "  nim-import: not built (skipped)"; fi
 	@if [ -d polyglot/gleam/fault_lookup/build ]; then \
 		cd polyglot/gleam/fault_lookup && gleam test > /dev/null 2>&1 && echo "  gleam: OK" || echo "  gleam: FAIL"; \
 	else echo "  gleam: not built (skipped)"; fi

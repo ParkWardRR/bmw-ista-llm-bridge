@@ -49,10 +49,17 @@
 <p align="center">
   <strong>Polyglot Architecture</strong><br>
   <img src="https://img.shields.io/badge/Go-Orchestrator-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go">
-  <img src="https://img.shields.io/badge/Nim-Reports-FFE953?style=flat-square&logoColor=black" alt="Nim">
+  <img src="https://img.shields.io/badge/Nim-Reports%20%7C%20ENET%20%7C%20Import-FFE953?style=flat-square&logoColor=black" alt="Nim">
   <img src="https://img.shields.io/badge/Gleam-Fault%20Lookup-FFAFF3?style=flat-square" alt="Gleam">
   <img src="https://img.shields.io/badge/Zig-VIN%20Search-F7A41D?style=flat-square&logo=zig&logoColor=white" alt="Zig">
   <img src="https://img.shields.io/badge/Odin-Key%20Extract-3882D6?style=flat-square" alt="Odin">
+</p>
+
+<p align="center">
+  <strong>Vehicle Safety</strong><br>
+  <img src="https://img.shields.io/badge/Car%20Access-READ--ONLY-critical?style=flat-square" alt="Read-Only">
+  <img src="https://img.shields.io/badge/Write%20UDS-BLOCKED-critical?style=flat-square" alt="Write Blocked">
+  <img src="https://img.shields.io/badge/Protocol%20Layer-Hard%20Enforced-critical?style=flat-square" alt="Protocol Enforced">
 </p>
 
 ---
@@ -63,7 +70,7 @@
   <img src="demo/dashboard.gif" alt="ista-bridge TUI dashboard" width="100%">
 </p>
 
-**ista-bridge** captures everything that happens during a BMW ISTA diagnostic session — screenshots, fault codes, ECU data, vehicle identity — and packages it into files that AI models (Claude, ChatGPT, etc.) can consume to help you troubleshoot your car. It also decrypts and queries ISTA's 7 GB DiagDocDb for VIN decoding, fault code lookup, and diagnostic data.
+**ista-bridge** captures everything that happens during a BMW ISTA diagnostic session — screenshots, fault codes, ECU data, vehicle identity — and packages it into files that AI models (Claude, ChatGPT, etc.) can consume to help you troubleshoot your car. It also decrypts and queries ISTA's 7 GB DiagDocDb for VIN decoding, fault code lookup, and diagnostic data. With the `ista-enet` satellite, it can read fault codes and ECU data directly from the car over ENET — strictly read-only, with write operations hard-blocked at the protocol layer. The `ista-import` satellite ingests scans from BMWeb, Beemuu, and svietlik into the bundle format.
 
 ### The problem
 
@@ -107,14 +114,14 @@ Then you paste `summary.md` into Claude or ChatGPT and ask *"what's wrong with m
 
 **Optional satellite tool compilers** (for faster offline lookups):
 
-| Compiler | Satellite Tool | Purpose |
+| Compiler | Satellite Tools | Purpose |
 |---|---|---|
-| [Nim](https://nim-lang.org/) | `ista-report` | Report rendering (Markdown, HTML, LLM summaries) |
+| [Nim](https://nim-lang.org/) | `ista-report`, `ista-enet`, `ista-import` | Report rendering, read-only ENET diagnostics, multi-format data import |
 | [Gleam](https://gleam.run/) | `ista-faultlookup` | Fault code / P-code search |
 | [Zig](https://ziglang.org/) | `ista-vinlookup` | VIN decoding via binary search |
 | [Odin](https://odin-lang.org/) | `ista-keyextract` | .NET PE/CLI key extraction |
 
-Without the satellite tools, all features still work via the PowerShell database bridge — the satellites just make lookups faster and work offline.
+Without the satellite tools, all features still work via the PowerShell database bridge — the satellites just make lookups faster and work offline. The `ista-enet` and `ista-import` tools provide new capabilities (live vehicle reads and multi-source import) that have no Go fallback.
 
 ### Install
 
@@ -129,13 +136,16 @@ Single binary, no runtime dependencies.
 ### Build everything (with Makefile)
 
 ```bash
-# Build Go binary + Nim report generator
+# Build Go binary + all Nim satellites (report, enet, import)
 make build
 
 # Build individual satellite tools
-make nim       # Report generator
-make gleam     # Fault code lookup
-make zig       # VIN decoder
+make nim          # All Nim tools (report, enet, import)
+make nim-report   # Report generator only
+make nim-enet     # ENET diagnostic client only
+make nim-import   # Multi-format importer only
+make gleam        # Fault code lookup
+make zig          # VIN decoder
 
 # Clean all build artifacts
 make clean
@@ -190,9 +200,11 @@ The TUI provides a dashboard with system status, capture stats, and keyboard-dri
 | `v` | VIN lookup (requires DiagDocDb) |
 | `f` | Fault code search (requires DiagDocDb) |
 | `r` | Generate diagnostic report (requires DiagDocDb) |
+| `l` | Live diagnostics — read faults/ECUs/VIN directly from car via ENET (requires `ista-enet`) |
+| `i` | Import external scan data from BMWeb/Beemuu/svietlik (requires `ista-import`) |
 | `q` | Quit |
 
-Database features (VIN lookup, fault search, report) appear only when DiagDocDb is accessible. The fault code search supports four modes — P-code, BMW fault code, Check Control messages, and diagnostic codes — switchable with `Tab` or number keys `1`–`4`.
+Database features (VIN lookup, fault search, report) appear only when DiagDocDb is accessible. Live and Import appear only when their satellite tools are built. The fault code search supports four modes — P-code, BMW fault code, Check Control messages, and diagnostic codes — switchable with `Tab` or number keys `1`–`4`. The Live view supports three modes — Faults, ECUs, VIN — also switchable with `Tab` or number keys `1`–`3`.
 
 ### `ista-bridge watch`
 
@@ -380,6 +392,68 @@ ista-bridge.exe odincs C:\EC-Apps\ISTA\TesterGUI\bin\Release\ISTAGUI.exe
 
 Delegates to the Odin-based `ista-keyextract` tool, which performs native PE/CLI binary parsing without a .NET runtime.
 
+### `ista-enet` (Satellite — Nim)
+
+Read-only diagnostic client for BMW F-series vehicles over ENET/HSFZ. **Write operations are hard-blocked at the protocol layer — they never reach the wire.**
+
+```bash
+# Read faults from DME (engine ECU)
+ista-enet.exe faults --json
+
+# Read faults from a specific ECU
+ista-enet.exe faults --ecu 0x56 --json
+
+# Scan for available ECUs
+ista-enet.exe ecus --json
+
+# Read a specific data identifier
+ista-enet.exe data --ecu 0x00 --did 0xF190
+
+# Read VIN
+ista-enet.exe vin --json
+
+# Specify car IP (default: 169.254.0.10)
+ista-enet.exe faults --host 169.254.0.1 --json
+```
+
+| Flag | Default | What it does |
+|---|---|---|
+| `--host` | `169.254.0.10` | Car ENET IP address |
+| `--port` | `6801` | ENET port |
+| `--ecu` | `0x00` | ECU address (hex) |
+| `--did` | `0xF190` | Data identifier (hex, for `data` command) |
+| `--tester` | `0xF4` | Tester logical address |
+| `--json` | false | JSON output for orchestrator integration |
+
+**Blocked UDS services** (raise `SafetyError` before serialization):
+`ClearDiagnosticInformation (0x14)`, `WriteDataByIdentifier (0x2E)`, `InputOutputControlByIdentifier (0x2F)`, `RoutineControl (0x31)`, `RequestDownload (0x34)`, `RequestUpload (0x35)`, `TransferData (0x36)`, `RequestTransferExit (0x37)`, `WriteMemoryByAddress (0x3D)`, `CommunicationControl (0x28)`, `ControlDTCSetting (0x85)`.
+
+### `ista-import` (Satellite — Nim)
+
+Imports diagnostic scans from other BMW tools and normalizes them into the ista-bridge bundle format. Auto-detects source format from JSON structure.
+
+```bash
+# Import a BMWeb scan
+ista-import.exe --bmweb scan.json --out my_bundle
+
+# Import a Beemuu snapshot
+ista-import.exe --beemuu snapshot.json --out my_bundle
+
+# Import a svietlik module scan
+ista-import.exe --svietlik modules.json --out my_bundle
+
+# Auto-detect format
+ista-import.exe --auto unknown.json --out my_bundle
+
+# Merge multiple sources into one bundle
+ista-import.exe --bmweb scan.json --beemuu snapshot.json --out merged_bundle
+
+# JSON to stdout (for orchestrator)
+ista-import.exe --auto scan.json --json
+```
+
+Each record in the output is tagged with a `data_source` field so you (and the LLM) know where each data point came from.
+
 ---
 
 ## DiagDocDb Access
@@ -403,7 +477,9 @@ Each component uses the language best suited to its task. Go orchestrates the sy
 | Tool | Language | Why this language |
 |---|---|---|
 | `ista-bridge` | **Go** | System orchestration — Win32 capture, TUI, encrypted DB access, session parsing, satellite tool discovery, and FASTA/zip.log extraction |
-| `ista-report` | **Nim** | All report rendering — Markdown, HTML (with base64-inlined screenshots and light/dark CSS), text, and LLM-optimized summaries. Nim's expressive string handling and `base64` stdlib produce self-contained HTML reports compiled to a native binary |
+| `ista-report` | **Nim** | All report rendering — Markdown, HTML (with base64-inlined screenshots and light/dark CSS), text, and LLM-optimized summaries |
+| `ista-enet` | **Nim** | Read-only ENET/HSFZ diagnostic client — TCP protocol, UDS read services, hard-blocked writes at protocol layer. Nim's `net` stdlib and systems-level control make it a natural fit for binary protocol work |
+| `ista-import` | **Nim** | Multi-format data importer — normalizes BMWeb, Beemuu, svietlik, and klartext JSON exports into the ista-bridge bundle format with data provenance tagging |
 | `ista-faultlookup` | **Gleam** (Erlang/BEAM) | Pattern matching and immutable data — Gleam's type-safe functional style is a natural fit for filtering and searching across fault code datasets with JSON output |
 | `ista-vinlookup` | **Zig** | Performance-critical search — Zig's zero-overhead sorted binary search over 7.9M VIN ranges runs in microseconds with no GC pauses |
 | `ista-keyextract` | **Odin** | Low-level PE/CLI binary parsing — Odin's manual memory control and bit manipulation make it ideal for walking .NET metadata tables and computing SHA-1 key tokens without a runtime |
@@ -418,11 +494,13 @@ Go discovers satellite tool binaries at runtime via the orchestrator (`orchestra
 
 If a satellite binary is found:
 - `report` / `bundle` commands → call `ista-report` (Nim) for all Markdown, HTML, and summary generation
+- `live` commands → call `ista-enet` (Nim) for read-only ENET/HSFZ vehicle diagnostics
+- `import` commands → call `ista-import` (Nim) for multi-format data ingestion
 - `vin` command → call `ista-vinlookup` (Zig) for fast binary search over exported VIN data
 - `lookup pcode/fault` → call `ista-faultlookup` (Gleam) for pattern matching over exported fault data
 - `odincs` command → call `ista-keyextract` (Odin) for native PE parsing
 
-If a satellite tool isn't built, Go falls back to its PowerShell database bridge for queries. The `db export-lookup` command exports the DiagDocDb data to JSON files that the satellite tools consume.
+If a satellite tool isn't built, Go falls back to its PowerShell database bridge for queries. The `db export-lookup` command exports the DiagDocDb data to JSON files that the satellite tools consume. The `ista-enet` and `ista-import` tools provide new capabilities (live vehicle reads, multi-source import) that have no Go fallback.
 
 Source code is in the `polyglot/` directory.
 
@@ -583,6 +661,9 @@ make build
 # Build all satellite tools
 make go nim gleam zig
 
+# Build just the ENET client and importer
+make nim-enet nim-import
+
 # Run
 .\ista-bridge.exe sessions
 ```
@@ -612,7 +693,7 @@ No CGo. No C compiler needed. Pure Go + FFmpeg.
 ```
 bmw-ista-llm-bridge/
 ├── main.go          # Entry point, subcommand routing, capture loop, SIMD pixel diff
-├── tui.go           # Bubble Tea interactive terminal UI (dashboard, watch, VIN, lookup, report views)
+├── tui.go           # Bubble Tea TUI (dashboard, watch, sessions, VIN, lookup, report, live, import)
 ├── orchestrate.go   # Satellite tool discovery, execution, and data export for offline lookups
 ├── session.go       # ISTA session discovery, XML parsing (META/TRANS/PRG), and file correlation
 ├── bundle.go        # LLM-friendly session bundling (JSON + Nim-generated summary.md)
@@ -630,11 +711,15 @@ bmw-ista-llm-bridge/
 ├── config.go        # TOML configuration with defaults
 ├── logging.go       # Structured logging (slog) with rotation (lumberjack)
 ├── Makefile         # Build targets for Go, Nim, Gleam, Zig
+├── INTEGRATION.md   # Ecosystem integration plan (klartext, BMWeb, Beemuu, svietlik, etc.)
 ├── polyglot/
 │   ├── odin/        # PE/CLI key extractor (Odin) — ista-keyextract
 │   ├── gleam/       # Fault code lookup (Gleam/Erlang) — ista-faultlookup
 │   ├── zig/         # VIN decoder with binary search (Zig) — ista-vinlookup
-│   └── nim/         # Report generator — Markdown, HTML, text, summary (Nim) — ista-report
+│   └── nim/
+│       ├── report_gen/   # Report generator (Nim) — ista-report
+│       ├── enet_client/  # Read-only ENET/HSFZ diagnostic client (Nim) — ista-enet
+│       └── data_import/  # Multi-format data importer (Nim) — ista-import
 └── demo/            # TUI demo GIFs
 ```
 
@@ -650,8 +735,8 @@ See [ROADMAP.md](ROADMAP.md) for the full phased plan.
 | 2. Session Parsing | **Done** | XML parser for ISTA transaction/meta/FASTA/zip.log files |
 | 3. Session Bundling | **Done** | JSON + Nim-generated Markdown/HTML output for LLM consumption |
 | 3.5. DiagDocDb Access | **Done** | Decrypt + query the 7 GB database (232 tables, 7.9M VIN ranges) |
-| 3.6. Interactive TUI | **Done** | Bubble Tea dashboard with VIN lookup, fault search, report generation |
-| 3.7. Polyglot Satellites | **Done** | Nim report renderer, Gleam fault lookup, Zig VIN search, Odin key extract |
+| 3.6. Interactive TUI | **Done** | Bubble Tea dashboard with VIN lookup, fault search, report, live diagnostics, import |
+| 3.7. Polyglot Satellites | **Done** | 7 satellite tools: Nim (report, ENET, import), Gleam (fault lookup), Zig (VIN search), Odin (key extract) |
 | 3.8. Satellite Orchestration | **Done** | Runtime tool discovery, graceful fallback, offline lookup data export |
 | 4. LLM Integration | Planned | `ista-bridge ask` — direct Claude/ChatGPT API integration |
 | 5. Distribution | Planned | GoReleaser, GitHub releases, Winget/Scoop |
@@ -663,7 +748,7 @@ See [ROADMAP.md](ROADMAP.md) for the full phased plan.
 <details>
 <summary><strong>Does this modify ISTA or my car in any way?</strong></summary>
 
-No. ista-bridge is read-only. It captures screenshots of the ISTA window and reads XML files that ISTA writes to disk. It never communicates with your vehicle or modifies any ISTA files.
+No. ista-bridge is strictly read-only. It captures screenshots of the ISTA window and reads XML files that ISTA writes to disk. The `ista-enet` satellite can connect directly to the car over ENET, but **write UDS services are hard-blocked at the protocol layer** — they raise a `SafetyError` before being serialized to the wire. There is no configuration, flag, or override that enables writes. The car is always read-only.
 </details>
 
 <details>
@@ -693,7 +778,7 @@ Yes. The `summary.md` output is plain Markdown — paste it into any LLM chat. T
 <details>
 <summary><strong>Do I need to install Nim/Gleam/Zig/Odin?</strong></summary>
 
-No. The satellite tools are optional performance enhancements. Without them, all features work through Go's PowerShell bridge to query DiagDocDb directly. The satellite tools provide faster offline lookups and standalone report generation.
+For basic features (capture, parse, bundle, query), no — the PowerShell bridge handles database queries. But the Nim satellites add capabilities that Go can't do alone: `ista-enet` provides direct read-only vehicle communication over ENET, `ista-import` ingests scans from BMWeb/Beemuu/svietlik, and `ista-report` handles all report rendering. Nim is the most important compiler to install.
 </details>
 
 ---

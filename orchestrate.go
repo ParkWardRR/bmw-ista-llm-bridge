@@ -17,6 +17,8 @@ var satelliteTools = map[string]struct {
 	"vinlookup":   {subdir: "polyglot/zig/data_processor/zig-out/bin", binary: "ista-vinlookup"},
 	"faultlookup": {subdir: "polyglot/gleam/fault_lookup/build/erlang-shipment", binary: "entrypoint"},
 	"report":      {subdir: "polyglot/nim/report_gen", binary: "ista-report"},
+	"enet":        {subdir: "polyglot/nim/enet_client", binary: "ista-enet"},
+	"import":      {subdir: "polyglot/nim/data_import", binary: "ista-import"},
 }
 
 func findTool(name string) (string, bool) {
