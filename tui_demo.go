@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -156,6 +158,13 @@ type importResultMsg struct {
 	err    string
 }
 
+type statusFlashMsg struct {
+	text string
+	ok   bool
+}
+
+type clearFlashMsg struct{}
+
 // ---------------------------------------------------------------------------
 // Model
 // ---------------------------------------------------------------------------
@@ -214,6 +223,14 @@ type tuiModel struct {
 
 	// Scroll for context preview
 	scrollY int
+
+	// Status flash
+	statusMsg string
+	statusOK  bool
+	savedPath string
+
+	// Print-and-quit
+	printAndQuit bool
 }
 
 func newTUIModel() tuiModel {
@@ -386,6 +403,15 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.impErr = msg.err
 		return m, nil
 
+	case statusFlashMsg:
+		m.statusMsg = msg.text
+		m.statusOK = msg.ok
+		return m, tea.Tick(3*time.Second, func(time.Time) tea.Msg { return clearFlashMsg{} })
+
+	case clearFlashMsg:
+		m.statusMsg = ""
+		return m, nil
+
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}
@@ -501,12 +527,38 @@ func (m tuiModel) keyContext(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "c":
-		// In real impl: copy m.contextText to clipboard via atotto/clipboard
-		// Demo: just flash a message
-		return m, nil
+		if err := clipboard.WriteAll(m.contextText); err != nil {
+			return m, func() tea.Msg {
+				return statusFlashMsg{
+					text: fmt.Sprintf("Clipboard failed: %v — use [w] to save or [p] to print", err),
+					ok:   false,
+				}
+			}
+		}
+		return m, func() tea.Msg {
+			return statusFlashMsg{
+				text: fmt.Sprintf("Copied to clipboard (~%d tokens)", m.tokens),
+				ok:   true,
+			}
+		}
 	case "w":
-		// In real impl: write to file
-		return m, nil
+		outPath := filepath.Join(".", "context.txt")
+		if err := os.WriteFile(outPath, []byte(m.contextText), 0644); err != nil {
+			return m, func() tea.Msg {
+				return statusFlashMsg{text: fmt.Sprintf("Write failed: %v", err), ok: false}
+			}
+		}
+		abs, _ := filepath.Abs(outPath)
+		m.savedPath = abs
+		return m, func() tea.Msg {
+			return statusFlashMsg{
+				text: fmt.Sprintf("Saved to %s (~%d tokens)", abs, m.tokens),
+				ok:   true,
+			}
+		}
+	case "p":
+		m.printAndQuit = true
+		return m, tea.Quit
 	case "enter":
 		m.view = viewBridge
 		return m, nil
@@ -907,10 +959,24 @@ func (m tuiModel) viewContextReady() string {
 		b.WriteString(styleSubtitle.Render(fmt.Sprintf("  ... %d more lines", len(lines)-end)) + "\n")
 	}
 
+	// Status flash
+	if m.statusMsg != "" {
+		if m.statusOK {
+			b.WriteString("\n" + styleOK.Render("  ✓ "+m.statusMsg) + "\n")
+		} else {
+			b.WriteString("\n" + styleError.Render("  ✗ "+m.statusMsg) + "\n")
+		}
+	}
+
+	if m.savedPath != "" && m.statusMsg == "" {
+		b.WriteString("\n" + styleSubtitle.Render("  Last saved: "+m.savedPath) + "\n")
+	}
+
 	// Actions
 	b.WriteString("\n")
 	b.WriteString(styleMenuKey.Render("[c]") + " " + styleNeutral.Render("Copy to clipboard") + "    ")
-	b.WriteString(styleMenuKey.Render("[w]") + " " + styleMenuDesc.Render("Save to file") + "\n")
+	b.WriteString(styleMenuKey.Render("[w]") + " " + styleMenuDesc.Render("Save context.txt") + "    ")
+	b.WriteString(styleMenuKey.Render("[p]") + " " + styleMenuDesc.Render("Print to stdout") + "\n")
 	b.WriteString(styleMenuKey.Render("[Space]") + " " + styleMenuDesc.Render("Toggle section") + "  ")
 	b.WriteString(styleMenuKey.Render("[↑↓]") + " " + styleMenuDesc.Render("Navigate") + "  ")
 	b.WriteString(styleMenuKey.Render("[Esc]") + " " + styleMenuDesc.Render("Back") + "\n")
@@ -1115,8 +1181,14 @@ var _ = json.Marshal
 
 func runTUI() {
 	p := tea.NewProgram(newTUIModel(), tea.WithAltScreen())
-	if _, err := p.Run(); err != nil {
+	result, err := p.Run()
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "TUI error: %v\n", err)
 		os.Exit(1)
+	}
+
+	if m, ok := result.(tuiModel); ok && m.printAndQuit && m.contextText != "" {
+		fmt.Print(m.contextText)
+		fmt.Fprintf(os.Stderr, "\n---\n~%d tokens | pipe to clipboard: ... | pbcopy (macOS) or ... | clip (Windows)\n", m.tokens)
 	}
 }
